@@ -1,0 +1,9 @@
+{
+  "name": "team-kanban",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "bash start.sh",
+    "server": "node server/index.js",
+    "client": "cd client && npm run dev"
+  }
+}
