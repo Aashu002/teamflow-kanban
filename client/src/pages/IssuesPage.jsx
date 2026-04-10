@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import Navbar from '../components/Navbar.jsx';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api.js';
 import { TYPE_META } from '../components/TaskCard.jsx';
 import { COLUMNS } from './BoardPage.jsx';
+import { useNavbar } from '../contexts/NavbarContext.jsx';
 
 export default function IssuesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -12,12 +12,15 @@ export default function IssuesPage() {
   
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
+  const { setHeaderData, clearHeaderData } = useNavbar();
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   
   const [filterType, setFilterType] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
   const [filterAssignee, setFilterAssignee] = useState('all');
+  const [projects, setProjects] = useState([]);
+  const [filterProject, setFilterProject] = useState('all');
 
   const loadIssues = () => {
     setLoading(true);
@@ -27,21 +30,26 @@ export default function IssuesPage() {
     if (tab === 'search' && filterType !== 'all') params.type = filterType;
     if (tab === 'search' && filterPriority !== 'all') params.priority = filterPriority;
     if (tab === 'search' && filterAssignee !== 'all') params.assignee = filterAssignee;
+    if (tab === 'search' && filterProject !== 'all') params.projectId = filterProject;
 
     api.get('/tasks/search', { params }).then(res => {
       setTasks(res.data);
     }).finally(() => setLoading(false));
     
-    // Also fetch users if not loaded
+    // Also fetch users and projects if not loaded
     if (users.length === 0) {
       api.get('/users').then(res => setUsers(res.data)).catch(() => {});
+    }
+    if (projects.length === 0) {
+      api.get('/projects').then(res => setProjects(res.data)).catch(() => {});
     }
   };
 
   useEffect(() => {
     loadIssues();
-    // eslint-disable-next-line
-  }, [tab]);
+    setHeaderData({ projectName: tab === 'created' ? 'Issues (Created)' : 'Issue Search' });
+    return () => clearHeaderData();
+  }, [tab, setHeaderData, clearHeaderData]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -51,7 +59,6 @@ export default function IssuesPage() {
 
   return (
     <div className="admin-page">
-      <Navbar />
       <div className="admin-container" style={{ maxWidth: 1000 }}>
         <div className="admin-section-header" style={{ marginBottom: 12 }}>
           <div>
@@ -110,9 +117,18 @@ export default function IssuesPage() {
               {users.length > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span className="text-muted" style={{ fontSize: 13, fontWeight: 500 }}>Assignee:</span>
-                  <select className="form-select" style={{ width: 160, padding: '4px 8px', fontSize: 13 }} value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}>
+                  <select className="form-select" style={{ width: 140, padding: '4px 8px', fontSize: 13 }} value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}>
                     <option value="all">All</option>
                     {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {projects.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="text-muted" style={{ fontSize: 13, fontWeight: 500 }}>Project:</span>
+                  <select className="form-select" style={{ width: 160, padding: '4px 8px', fontSize: 13 }} value={filterProject} onChange={e => setFilterProject(e.target.value)}>
+                    <option value="all">All Projects</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
               )}

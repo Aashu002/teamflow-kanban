@@ -5,9 +5,9 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { TYPE_META } from '../components/TaskCard.jsx';
 import { COLUMNS } from './BoardPage.jsx';
-import Navbar from '../components/Navbar.jsx';
 import api from '../api.js';
 import { socket } from '../socket.js';
+import { useNavbar } from '../contexts/NavbarContext.jsx';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -288,11 +288,169 @@ function LinkTaskModal({ sourceTaskId, onLinked, onClose }) {
   );
 }
 
+// ─── Edit Task Modal ─────────────────────────────────────────────────────────
+
+function EditTaskModal({ task, onUpdate, onClose }) {
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description || '');
+  const [type, setType] = useState(task.task_type);
+  const [priority, setPriority] = useState(task.priority);
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  const handleSave = async () => {
+    if (!title.trim()) return toast({ message: 'Title is required', type: 'error' });
+    setSaving(true);
+    try {
+      const { data } = await api.patch(`/tasks/${task.id}`, { title, description, task_type: type, priority });
+      onUpdate(data);
+      toast({ message: 'Task updated', type: 'success' });
+      onClose();
+    } catch {
+      toast({ message: 'Failed to update task', type: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ maxWidth: 600, width: '95vw' }}>
+        <div className="modal-header">
+          <div className="modal-title">✏️ Edit Task</div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <label className="form-label">Title</label>
+            <input type="text" className="form-input" value={title} onChange={e => setTitle(e.target.value)} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div>
+              <label className="form-label">Issue Type</label>
+              <select className="form-select" value={type} onChange={e => setType(e.target.value)}>
+                {Object.entries(TYPE_META).map(([k, v]) => (
+                  <option key={k} value={k}>{v.icon} {v.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Priority</label>
+              <select className="form-select" value={priority} onChange={e => setPriority(e.target.value)}>
+                <option value="high">🔴 High</option>
+                <option value="medium">🟡 Medium</option>
+                <option value="low">🟢 Low</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="form-label">Description</label>
+            <CommentEditor value={description} onChange={setDescription} rows={8} />
+          </div>
+          <div className="modal-footer">
+            <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
+            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Move Task Modal ─────────────────────────────────────────────────────────
+
+function MoveTaskModal({ task, onMoved, onClose }) {
+  const [projects, setProjects] = useState([]);
+  const [targetProjectId, setTargetProjectId] = useState(task.project_id);
+  const [type, setType] = useState(task.task_type);
+  const [priority, setPriority] = useState(task.priority);
+  const [loading, setLoading] = useState(true);
+  const [moving, setMoving] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    api.get('/projects').then(res => {
+      setProjects(res.data);
+      setLoading(false);
+    }).catch(() => toast({ message: 'Failed to load projects', type: 'error' }));
+  }, [toast]);
+
+  const handleMove = async () => {
+    setMoving(true);
+    try {
+      const { data } = await api.post(`/tasks/${task.id}/move`, {
+        targetProjectId: parseInt(targetProjectId),
+        task_type: type,
+        priority
+      });
+      onMoved(data);
+      toast({ message: 'Task moved successfully', type: 'success' });
+      onClose();
+    } catch (err) {
+      toast({ message: err.response?.data?.error || 'Failed to move task', type: 'error' });
+    } finally {
+      setMoving(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ maxWidth: 450, width: '90vw' }}>
+        <div className="modal-header">
+          <div className="modal-title">🚚 Move Task</div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        {loading ? <div className="loading-spinner" style={{ margin: '20px auto' }} /> : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              Transfer this issue to another project. Note: The <b>Issue Key</b> will change to match the new project's numbering.
+            </p>
+            <div>
+              <label className="form-label">Target Project</label>
+              <select className="form-select" value={targetProjectId} onChange={e => setTargetProjectId(e.target.value)}>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.key_prefix})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Change Type</label>
+              <select className="form-select" value={type} onChange={e => setType(e.target.value)}>
+                {Object.entries(TYPE_META).map(([k, v]) => (
+                  <option key={k} value={k}>{v.icon} {v.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Change Priority</label>
+              <select className="form-select" value={priority} onChange={e => setPriority(e.target.value)}>
+                <option value="high">🔴 High</option>
+                <option value="medium">🟡 Medium</option>
+                <option value="low">🟢 Low</option>
+              </select>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={onClose} disabled={moving}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleMove} disabled={moving}>
+                {moving ? 'Moving...' : 'Move Task'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function TaskDetailPage() {
   const { projectId, taskKey } = useParams();
   const navigate  = useNavigate();
+  const { setHeaderData, clearHeaderData } = useNavbar();
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
 
@@ -314,6 +472,8 @@ export default function TaskDetailPage() {
   const [estDate, setEstDate]        = useState('');
   const [estTime, setEstTime]        = useState('');
   const [showLinkModal, setShowLinkModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showMoveModal, setShowMoveModal] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -331,6 +491,16 @@ export default function TaskDetailPage() {
       navigate(`/projects/${projectId}/board`);
     } finally { setLoading(false); }
   }, [projectId, taskNumber, navigate, toast]);
+
+  useEffect(() => {
+    if (task) {
+      setHeaderData({ 
+        projectName: `${task.key_prefix}-${task.task_number}`, 
+        onBack: () => navigate(`/projects/${task.project_id}/board`) 
+      });
+    }
+    return () => clearHeaderData();
+  }, [task, setHeaderData, clearHeaderData, navigate]);
 
   useEffect(() => {
     loadData();
@@ -491,7 +661,6 @@ export default function TaskDetailPage() {
 
   return (
     <div className="task-detail-page">
-      <Navbar projectName={task.key_prefix} onBack={() => navigate(`/projects/${projectId}/board`)} />
 
       <div className="td-layout">
         {/* ── MAIN CONTENT ── */}
@@ -547,8 +716,14 @@ export default function TaskDetailPage() {
           <div className="td-action-bar" style={{ margin: '16px 0 24px 0' }}>
             {canEdit && (
               <button className="btn btn-secondary btn-sm"
-                onClick={() => { setDescDraft(task.description || ''); setEditingDesc(true); }}>
+                onClick={() => setShowEditModal(true)}>
                 ✏️ Edit
+              </button>
+            )}
+            {canEdit && (
+              <button className="btn btn-secondary btn-sm"
+                onClick={() => setShowMoveModal(true)}>
+                🚚 Move
               </button>
             )}
             {canEdit && (
@@ -571,7 +746,7 @@ export default function TaskDetailPage() {
           <div className="td-details-grid">
             {[
               { label: 'Type', value: <span className={`type-badge type-${task.task_type}`}>{tm.icon} {tm.label}</span> },
-              { label: 'Priority', value: <span className={`priority-badge priority-${task.priority}`}>{task.priority}</span> },
+              { label: 'Priority', value: <span className={`priority-badge priority-${task.priority}`}>{task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}</span> },
               { label: 'Status', value: (
                 <select className="td-inline-select" value={task.status}
                   onChange={e => patch({ status: e.target.value })} disabled={!canEdit}>
@@ -964,10 +1139,35 @@ export default function TaskDetailPage() {
       </div>
 
       {showLogHours && (
-        <LogHoursModal taskId={task.id} onLogged={onNewHourLog} onClose={() => setShowLogHours(false)} />
+        <LogHoursModal 
+          taskId={task.id} 
+          onLogged={onNewHourLog} 
+          onClose={() => setShowLogHours(false)} 
+        />
       )}
+
       {showLinkModal && (
-        <LinkTaskModal sourceTaskId={task.id} onLinked={onNewLink} onClose={() => setShowLinkModal(false)} />
+        <LinkTaskModal 
+          sourceTaskId={task.id} 
+          onLinked={onNewLink} 
+          onClose={() => setShowLinkModal(false)} 
+        />
+      )}
+
+      {showEditModal && (
+        <EditTaskModal
+          task={task}
+          onUpdate={(t) => setTask(prev => ({ ...prev, ...t }))}
+          onClose={() => setShowEditModal(false)}
+        />
+      )}
+
+      {showMoveModal && (
+        <MoveTaskModal
+          task={task}
+          onMoved={(t) => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`, { replace: true })}
+          onClose={() => setShowMoveModal(false)}
+        />
       )}
     </div>
   );

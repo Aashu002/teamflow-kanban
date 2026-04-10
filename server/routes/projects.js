@@ -45,13 +45,13 @@ router.get('/', authMiddleware, (req, res) => {
 
 // POST /api/projects
 router.post('/', authMiddleware, adminOnly, (req, res) => {
-  const { name, description, memberIds } = req.body;
+  const { name, description, memberIds, estimated_completion_date, project_goal } = req.body;
   if (!name) return res.status(400).json({ error: 'Project name is required' });
 
   const keyPrefix = makeKeyPrefix(name);
   const result = db.prepare(
-    'INSERT INTO projects (name, key_prefix, description, owner_id) VALUES (?, ?, ?, ?)'
-  ).run(name, keyPrefix, description || '', req.user.id);
+    'INSERT INTO projects (name, key_prefix, description, owner_id, estimated_completion_date, project_goal) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(name, keyPrefix, description || '', req.user.id, estimated_completion_date || null, project_goal || null);
 
   const projectId = result.lastInsertRowid;
   db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)').run(projectId, req.user.id);
@@ -62,6 +62,57 @@ router.post('/', authMiddleware, adminOnly, (req, res) => {
     }
   }
   res.status(201).json({ id: projectId, name, key_prefix: keyPrefix, description, owner_id: req.user.id });
+});
+
+// GET /api/projects/all-directory
+router.get('/all-directory', authMiddleware, (req, res) => {
+  const projects = db.prepare(`
+    SELECT p.*, u.name as owner_name,
+      EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?) as is_member,
+      (SELECT status FROM project_requests pr WHERE pr.project_id = p.id AND pr.user_id = ?) as request_status
+    FROM projects p
+    LEFT JOIN users u ON u.id = p.owner_id
+    ORDER BY p.name ASC
+  `).all(req.user.id, req.user.id);
+  res.json(projects);
+});
+
+// GET /api/projects/requests/pending
+router.get('/requests/pending', authMiddleware, adminOnly, (req, res) => {
+  const requests = db.prepare(`
+    SELECT pr.*, p.name as project_name, u.name as user_name, u.email as user_email
+    FROM project_requests pr
+    JOIN projects p ON p.id = pr.project_id
+    JOIN users u ON u.id = pr.user_id
+    WHERE pr.status = 'pending'
+    ORDER BY pr.created_at DESC
+  `).all();
+  res.json(requests);
+});
+
+// PUT /api/projects/requests/:id/:action
+router.put('/requests/:id/:action', authMiddleware, adminOnly, (req, res) => {
+  const { id, action } = req.params;
+  const reqRow = db.prepare('SELECT pr.* FROM project_requests pr WHERE pr.id = ?').get(id);
+  if (!reqRow) return res.status(404).json({ error: 'Request not found' });
+
+  if (action === 'approve') {
+    db.prepare("UPDATE project_requests SET status = 'approved' WHERE id = ?").run(id);
+    db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)').run(reqRow.project_id, reqRow.user_id);
+  } else if (action === 'reject') {
+    db.prepare("UPDATE project_requests SET status = 'rejected' WHERE id = ?").run(id);
+  }
+  res.json({ success: true });
+});
+
+// POST /api/projects/:id/requests
+router.post('/:id/requests', authMiddleware, (req, res) => {
+  db.prepare(`
+    INSERT INTO project_requests (project_id, user_id, status)
+    VALUES (?, ?, 'pending')
+    ON CONFLICT(project_id, user_id) DO UPDATE SET status = 'pending'
+  `).run(req.params.id, req.user.id);
+  res.json({ success: true });
 });
 
 // GET /api/projects/:id
@@ -79,10 +130,29 @@ router.get('/:id', authMiddleware, (req, res) => {
 });
 
 // PATCH /api/projects/:id
-router.patch('/:id', authMiddleware, adminOnly, (req, res) => {
-  const { name, description } = req.body;
-  db.prepare('UPDATE projects SET name = ?, description = ? WHERE id = ?').run(name, description, req.params.id);
-  res.json({ success: true });
+router.patch('/:id', authMiddleware, (req, res) => {
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  
+  // Allow admins or the project owner to edit the project details
+  if (req.user.role !== 'admin' && project.owner_id !== req.user.id) {
+    return res.status(403).json({ error: 'Admin or Owner access required' });
+  }
+
+  const { name, description, estimated_completion_date, project_goal } = req.body;
+  
+  db.prepare(`
+    UPDATE projects 
+    SET name = COALESCE(?, name), 
+        description = COALESCE(?, description),
+        estimated_completion_date = COALESCE(?, estimated_completion_date),
+        project_goal = COALESCE(?, project_goal)
+    WHERE id = ?
+  `).run(name, description, estimated_completion_date, project_goal, req.params.id);
+  
+  const updatedProject = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+  // Optional: Emit socket event here if we were using it for project updates globally
+  res.json(updatedProject);
 });
 
 // DELETE /api/projects/:id

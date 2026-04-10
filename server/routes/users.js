@@ -67,4 +67,70 @@ router.delete('/:id', authMiddleware, adminOnly, (req, res) => {
   res.json({ success: true });
 });
 
+// GET /api/users/me — profile and project info
+router.get('/me', authMiddleware, (req, res) => {
+  try {
+    const user = db.prepare('SELECT id, name, email, avatar_color, avatar_url, timezone, role, created_at FROM users WHERE id = ?').get(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const projects = db.prepare(`
+      SELECT p.id, p.name, p.key_prefix, p.owner_id
+      FROM projects p
+      INNER JOIN project_members pm ON pm.project_id = p.id
+      WHERE pm.user_id = ?
+      ORDER BY p.name ASC
+    `).all(req.user.id);
+
+    const fullProfile = {
+      ...user,
+      timezone: user.timezone || 'UTC',
+      projects
+    };
+    
+    res.json(fullProfile);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/users/me/profile — update profile data
+router.put('/me/profile', authMiddleware, (req, res) => {
+  try {
+    const { name, timezone, avatar_url } = req.body;
+    if (!name) return res.status(400).json({ error: 'Name is required' });
+
+    db.prepare('UPDATE users SET name = ?, timezone = ?, avatar_url = ? WHERE id = ?')
+      .run(name, timezone || 'UTC', avatar_url || null, req.user.id);
+
+    res.json({ success: true, name, timezone, avatar_url });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/users/me/password — update password
+router.put('/me/password', authMiddleware, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Both passwords are required' });
+    if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
+
+    const user = db.prepare('SELECT password FROM users WHERE id = ?').get(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const match = await bcrypt.compare(currentPassword, user.password);
+    if (!match) return res.status(401).json({ error: 'Incorrect current password' });
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, req.user.id);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

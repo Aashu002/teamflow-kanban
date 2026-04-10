@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext.jsx';
 import { ToastProvider } from './components/Toast.jsx';
+import { NavbarProvider } from './contexts/NavbarContext.jsx';
+import Navbar from './components/Navbar.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import SetupPage from './pages/SetupPage.jsx';
 import HomePage from './pages/HomePage.jsx';
@@ -26,6 +28,15 @@ function AdminRoute({ children }) {
   return children;
 }
 
+function AuthenticatedLayout() {
+  return (
+    <>
+      <Navbar />
+      <Outlet />
+    </>
+  );
+}
+
 export default function App() {
   const [needsSetup, setNeedsSetup] = useState(null);
   const { user } = useAuth();
@@ -42,37 +53,41 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <ToastProvider>
-        <Routes>
-          <Route path="/setup" element={
-            needsSetup ? <SetupPage onSetupDone={() => setNeedsSetup(false)} /> : <Navigate to="/login" replace />
-          } />
-          <Route path="/login" element={
-            needsSetup ? <Navigate to="/setup" replace /> : (user ? <Navigate to="/home" replace /> : <LoginPage />)
-          } />
+      <NavbarProvider>
+        <ToastProvider>
+          <Routes>
+            <Route path="/setup" element={
+              needsSetup ? <SetupPage onSetupDone={() => setNeedsSetup(false)} /> : <Navigate to="/login" replace />
+            } />
+            <Route path="/login" element={
+              needsSetup ? <Navigate to="/setup" replace /> : (user ? <Navigate to="/home" replace /> : <LoginPage />)
+            } />
 
-          {/* Home is the post-login greeting space */}
-          <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
+            {/* Authenticated Routes with Global Navbar */}
+            <Route element={<ProtectedRoute><AuthenticatedLayout /></ProtectedRoute>}>
+              <Route path="/home" element={<HomePage />} />
+              
+              {/* Board & Task Detail */}
+              <Route path="/projects/:projectId/board" element={<BoardPage />} />
+              <Route path="/projects/:projectId/tasks/:taskKey" element={<TaskDetailPage />} />
 
-          {/* Board & Task Detail */}
-          <Route path="/projects/:projectId/board" element={<ProtectedRoute><BoardPage /></ProtectedRoute>} />
-          <Route path="/projects/:projectId/tasks/:taskKey" element={<ProtectedRoute><TaskDetailPage /></ProtectedRoute>} />
+              {/* Admin */}
+              <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
 
-          {/* Admin */}
-          <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
+              {/* Profile */}
+              <Route path="/profile" element={<ProfilePage />} />
+              
+              {/* Global Pages */}
+              <Route path="/projects/all" element={<AllProjectsPage />} />
+              <Route path="/issues" element={<IssuesPage />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
+            </Route>
 
-          {/* Profile */}
-          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-          
-          {/* Global Pages */}
-          <Route path="/projects/all" element={<ProtectedRoute><AllProjectsPage /></ProtectedRoute>} />
-          <Route path="/issues" element={<ProtectedRoute><IssuesPage /></ProtectedRoute>} />
-          <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
-
-          {/* Catch-all → home or login */}
-          <Route path="*" element={<Navigate to={user ? '/home' : '/login'} replace />} />
-        </Routes>
-      </ToastProvider>
+            {/* Catch-all → home or login */}
+            <Route path="*" element={<Navigate to={user ? '/home' : '/login'} replace />} />
+          </Routes>
+        </ToastProvider>
+      </NavbarProvider>
     </BrowserRouter>
   );
 }

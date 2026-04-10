@@ -29,10 +29,10 @@ router.post('/setup', async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
     const color = AVATAR_COLORS[0];
     const result = db.prepare(
-      'INSERT INTO users (name, email, password, avatar_color, role) VALUES (?, ?, ?, ?, ?)'
-    ).run(name, email, hashed, color, 'admin');
+      'INSERT INTO users (name, email, password, avatar_color, role, timezone) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(name, email, hashed, color, 'admin', 'UTC');
 
-    const user = { id: result.lastInsertRowid, name, email, avatar_color: color, role: 'admin' };
+    const user = { id: result.lastInsertRowid, name, email, avatar_color: color, avatar_url: null, timezone: 'UTC', role: 'admin' };
     const token = jwt.sign({ id: user.id, name, email, role: 'admin' }, JWT_SECRET, { expiresIn: '7d' });
     res.status(201).json({ token, user });
   } catch (err) {
@@ -67,7 +67,15 @@ router.post('/login', async (req, res) => {
     );
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, avatar_color: user.avatar_color, role: user.role }
+      user: { 
+        id: user.id, 
+        name: user.name, 
+        email: user.email, 
+        avatar_color: user.avatar_color, 
+        avatar_url: user.avatar_url,
+        timezone: user.timezone || 'UTC',
+        role: user.role 
+      }
     });
   } catch (err) {
     console.error(err);

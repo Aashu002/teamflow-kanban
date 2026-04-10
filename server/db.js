@@ -68,7 +68,47 @@ raw.exec(`
     mimetype TEXT NOT NULL DEFAULT 'application/octet-stream',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS hour_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    hours REAL NOT NULL CHECK(hours > 0),
+    note TEXT DEFAULT '',
+    logged_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS project_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project_id, user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS task_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    linked_task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    link_type TEXT DEFAULT 'relates_to',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(task_id, linked_task_id, link_type)
+  );
 `);
+
+// Safe migrations for existing databases
+['estimated_completion TEXT', 'hours_estimated REAL DEFAULT 0'].forEach(col => {
+  try { raw.exec(`ALTER TABLE tasks ADD COLUMN ${col}`); } catch {}
+});
+
+['estimated_completion_date TEXT', 'project_goal TEXT'].forEach(col => {
+  try { raw.exec(`ALTER TABLE projects ADD COLUMN ${col}`); } catch {}
+});
+
+['avatar_url TEXT', 'timezone TEXT DEFAULT "UTC"'].forEach(col => {
+  try { raw.exec(`ALTER TABLE users ADD COLUMN ${col}`); } catch {}
+});
 
 // Wrapper exposing better-sqlite3-compatible API
 const db = {

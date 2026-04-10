@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragOverlay
 } from '@dnd-kit/core';
-import Navbar from '../components/Navbar.jsx';
 import KanbanColumn from '../components/KanbanColumn.jsx';
+import { useNavbar } from '../contexts/NavbarContext.jsx';
 import TaskCard, { TYPE_META } from '../components/TaskCard.jsx';
 import CreateTaskModal from '../components/CreateTaskModal.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
@@ -12,6 +12,7 @@ import api from '../api.js';
 import { socket } from '../socket.js';
 
 export const COLUMNS = [
+  { id: 'backlog',      label: 'Backlog',               color: '#64748b' },
   { id: 'open',         label: 'Open',                  color: '#3b82f6' },
   { id: 'gathering',    label: 'Gathering Requirements', color: '#8b5cf6' },
   { id: 'inprogress',   label: 'In Progress',            color: '#f59e0b' },
@@ -26,6 +27,7 @@ export default function BoardPage() {
   const { user, isAdmin } = useAuth();
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const { setHeaderData, clearHeaderData } = useNavbar();
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
@@ -83,6 +85,13 @@ export default function BoardPage() {
     };
   }, [projectId, navigate]);
 
+  useEffect(() => {
+    if (project) {
+      setHeaderData({ projectName: project.name, onBack: () => navigate('/home') });
+    }
+    return () => clearHeaderData();
+  }, [project, setHeaderData, clearHeaderData, navigate]);
+
   const filteredTasks = tasks.filter(t => {
     if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
     if (filterAssignee !== 'all' && String(t.assignee_id) !== filterAssignee) return false;
@@ -134,7 +143,6 @@ export default function BoardPage() {
 
   return (
     <div className="board-page">
-      <Navbar projectName={project?.name} onBack={() => navigate('/home')} />
 
       <div className="board-toolbar">
         <span className="board-toolbar-title">{viewMode === 'board' ? 'Kanban Board' : 'Project Backlog'}</span>

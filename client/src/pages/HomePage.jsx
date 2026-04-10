@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { TYPE_META } from '../components/TaskCard.jsx';
 import { COLUMNS } from './BoardPage.jsx';
-import Navbar from '../components/Navbar.jsx';
 import api from '../api.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -336,7 +335,6 @@ export default function HomePage() {
 
   return (
     <div className="dashboard-page">
-      <Navbar />
       <div className="dashboard-content">
 
         {/* ── Hero ── */}
@@ -374,7 +372,7 @@ export default function HomePage() {
           <div className="dash-panel">
             <div className="dash-panel-header">
               <h3 className="dash-panel-title">
-                📁 My Projects
+                📂 My Projects
                 <span className="dash-section-count">{projects.length}</span>
               </h3>
             </div>
@@ -541,7 +539,7 @@ export default function HomePage() {
           <div className="dash-panel" style={{ display: 'flex', flexDirection: 'column' }}>
             <div className="dash-panel-header">
               <h3 className="dash-panel-title">
-                🥧 Issues by Status
+                📊 Issues by Status
                 <span className="dash-section-count">{totalTickets} total</span>
               </h3>
             </div>
