@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import GlobalCreateTaskModal from './GlobalCreateTaskModal.jsx';
 import { socket } from '../socket.js';
+import { useNavbar } from '../contexts/NavbarContext.jsx';
 
 function initials(name) {
   return name?.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
@@ -37,7 +38,8 @@ function Dropdown({ label, children }) {
   );
 }
 
-export default function Navbar({ projectName, onBack }) {
+export default function Navbar() {
+  const { projectName, onBack } = useNavbar();
   const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -79,46 +81,47 @@ export default function Navbar({ projectName, onBack }) {
     <>
       <nav className="navbar">
         <div className="navbar-left">
-          {onBack ? (
-            <>
-              <button className="navbar-back" onClick={onBack}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                Dashboard
-              </button>
-              <span className="navbar-sep">›</span>
-              <span className="navbar-project-name">{projectName}</span>
-            </>
-          ) : (
-            <Link to="/home" className="navbar-brand">
-              <div className="navbar-brand-icon">⚡</div>
-              <span className="navbar-brand-name">TeamFlow</span>
-            </Link>
-          )}
+          <Link to="/home" className="navbar-brand">
+            <div className="navbar-brand-icon">⚡</div>
+            <span className="navbar-brand-name">TeamFlow</span>
+          </Link>
 
-          {!onBack && (
-            <div className="navbar-main-links">
-              <Link to="/analytics" className="navbar-nav-link">Dashboards</Link>
-              
-              <Dropdown label="Projects">
-                <button className="user-dropdown-item" onClick={() => navigate('/projects/all')}>
-                  🌍 All Projects directory
+          {projectName && (
+            <div className="navbar-breadcrumb">
+              <span className="navbar-sep">/</span>
+              {onBack ? (
+                <button className="navbar-back-breadcrumb" onClick={onBack} title="Back to board">
+                  {projectName}
                 </button>
-              </Dropdown>
-
-              <Dropdown label="Issues">
-                <button className="user-dropdown-item" onClick={() => navigate('/issues?tab=created')}>
-                  🙋‍♂️ Created By Me
-                </button>
-                <button className="user-dropdown-item" onClick={() => navigate('/issues?tab=search')}>
-                  🔍 Search for Issues
-                </button>
-              </Dropdown>
-
-              <button className="btn btn-primary btn-sm" style={{ marginLeft: 16 }} onClick={() => setShowGlobalCreate(true)}>
-                Create Issue
-              </button>
+              ) : (
+                <span className="navbar-project-name-breadcrumb">{projectName}</span>
+              )}
             </div>
           )}
+
+          <div className="navbar-main-links" style={{ marginLeft: 24, paddingLeft: 24, borderLeft: '1px solid var(--border)', display: 'flex', alignItems: 'center' }}>
+            <Link to="/analytics" className="navbar-nav-link">Dashboards</Link>
+            
+            <Dropdown label="Projects">
+              <button className="user-dropdown-item" onClick={() => navigate('/projects/all')}>
+                🌍 All Projects directory
+              </button>
+            </Dropdown>
+
+            <Dropdown label="Issues">
+              <button className="user-dropdown-item" onClick={() => navigate('/issues?tab=created')}>
+                🙋‍♂️ Created By Me
+              </button>
+              <button className="user-dropdown-item" onClick={() => navigate('/issues?tab=search')}>
+                🔍 Search for Issues
+              </button>
+            </Dropdown>
+
+            <button className="btn btn-primary btn-sm" style={{ marginLeft: 16 }} onClick={() => setShowGlobalCreate(true)}>
+              Create Issue
+            </button>
+          </div>
+
 
           {!isConnected && (
             <div style={{ marginLeft: 20, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'rgba(239,68,68,0.1)', borderRadius: 12, border: '1px solid rgba(239,68,68,0.2)' }}>

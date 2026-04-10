@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import Navbar from '../components/Navbar.jsx';
 import api from '../api.js';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Sector, ComposedChart, Line } from 'recharts';
 import { TYPE_META } from '../components/TaskCard.jsx';
@@ -155,7 +154,6 @@ export default function AnalyticsPage() {
   return (
     <div className="page-layout" style={{ background: 'var(--bg-document)' }}>
       <style>{`.recharts-sector { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }`}</style>
-      <Navbar />
       <div className="page-content" style={{ maxWidth: 1200, margin: '20px auto', padding: '0 20px', paddingBottom: 60 }}>
         
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
@@ -246,6 +244,7 @@ export default function AnalyticsPage() {
                   <BarChart data={workloadStats} layout="vertical" margin={{ left: 40 }}>
                     <XAxis type="number" hide />
                     <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-primary)' }} width={100} />
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
                     <RechartsTooltip cursor={{ fill: 'rgba(255,255,255,0.02)' }} contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8 }} />
                     <Bar dataKey="active_count" name="Active Tasks" fill="var(--accent-purple)" radius={[0, 4, 4, 0]} barSize={20} />
                   </BarChart>
@@ -312,12 +311,13 @@ export default function AnalyticsPage() {
              ) : (
                 <div style={{ height: 260 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={accuracyStats} margin={{ bottom: 20 }}>
+                    <BarChart data={accuracyStats} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
                       <XAxis dataKey="title" hide />
                       <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
-                      <RechartsTooltip contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8 }} />
-                      <Bar dataKey="estimated" name="Est. Hours" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="actual" name="Actual Hours" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                      <RechartsTooltip cursor={{ fill: 'rgba(255,255,255,0.02)' }} contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8 }} />
+                      <Bar dataKey="estimated" name="Est. Hours" fill="#94a3b8" radius={[4, 4, 0, 0]} barSize={24} />
+                      <Bar dataKey="actual" name="Actual Hours" fill="#0ea5e9" radius={[4, 4, 0, 0]} barSize={24} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

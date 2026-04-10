@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Navbar from '../components/Navbar.jsx';
 import api from '../api.js';
 
 function initials(name) {
@@ -163,7 +162,6 @@ export default function AdminPage() {
 
   return (
     <div className="admin-page">
-      <Navbar />
       <div className="admin-container">
         <div className="admin-section-header" style={{ marginBottom: 8 }}>
           <div>

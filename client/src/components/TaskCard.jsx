@@ -55,7 +55,7 @@ export default function TaskCard({ task, dragging }) {
       {/* Footer: priority + assignee */}
       <div className="task-card-footer" style={{ marginTop: 10 }}>
         <span className={`priority-badge priority-${task.priority}`}>
-          {PRIORITY_DOT[task.priority]} {task.priority}
+          {PRIORITY_DOT[task.priority]} {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
         </span>
 
         {task.assignee_name ? (

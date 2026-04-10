@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import Navbar from '../components/Navbar.jsx';
 import api from '../api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useToast } from '../components/Toast.jsx';
+import { useNavbar } from '../contexts/NavbarContext.jsx';
 
 const AVATAR_OPTIONS = [
   'https://api.dicebear.com/8.x/bottts/svg?seed=Felix',
@@ -33,6 +32,7 @@ const TIMEZONES = [
 export default function ProfilePage() {
   const { user, updateUser, logout } = useAuth();
   const { showToast } = useToast();
+  const { setHeaderData, clearHeaderData } = useNavbar();
   
   const [loading, setLoading] = useState(true);
   const [profileData, setProfileData] = useState(null);
@@ -48,7 +48,9 @@ export default function ProfilePage() {
 
   useEffect(() => {
     fetchProfile();
-  }, []);
+    setHeaderData({ projectName: 'My Profile' });
+    return () => clearHeaderData();
+  }, [setHeaderData, clearHeaderData]);
 
   const fetchProfile = async () => {
     try {
@@ -104,7 +106,6 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <div className="board-page">
-        <Navbar projectName="My Profile" onBack={() => window.history.back()} />
         <div className="flex-center" style={{ flex: 1 }}>
           <div className="loading-spinner" />
         </div>
@@ -114,7 +115,6 @@ export default function ProfilePage() {
 
   return (
     <div className="board-page" style={{ overflowY: 'auto' }}>
-      <Navbar projectName="My Profile" onBack={() => window.history.back()} />
       
       <div className="admin-container" style={{ padding: '40px 32px' }}>
         <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 32 }}>My Profile</h1>

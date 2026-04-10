@@ -1,14 +1,14 @@
-import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Navbar from '../components/Navbar.jsx';
 import api from '../api.js';
 import { useToast } from '../components/Toast.jsx';
+import { useNavbar } from '../contexts/NavbarContext.jsx';
 
 export default function AllProjectsPage() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { setHeaderData, clearHeaderData } = useNavbar();
 
   const loadProjects = () => {
     api.get('/projects/all-directory').then(res => {
@@ -17,7 +17,11 @@ export default function AllProjectsPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadProjects(); }, []);
+  useEffect(() => { 
+    loadProjects(); 
+    setHeaderData({ projectName: 'Projects Directory' });
+    return () => clearHeaderData();
+  }, [setHeaderData, clearHeaderData]);
 
   const handleJoin = async (id) => {
     try {
@@ -31,7 +35,6 @@ export default function AllProjectsPage() {
 
   return (
     <div className="admin-page">
-      <Navbar />
       <div className="admin-container">
         <div className="admin-section-header" style={{ marginBottom: 12 }}>
           <div>

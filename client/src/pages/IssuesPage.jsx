@@ -1,9 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import Navbar from '../components/Navbar.jsx';
 import api from '../api.js';
 import { TYPE_META } from '../components/TaskCard.jsx';
 import { COLUMNS } from './BoardPage.jsx';
+import { useNavbar } from '../contexts/NavbarContext.jsx';
 
 export default function IssuesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -12,6 +10,7 @@ export default function IssuesPage() {
   
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
+  const { setHeaderData, clearHeaderData } = useNavbar();
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -40,8 +39,9 @@ export default function IssuesPage() {
 
   useEffect(() => {
     loadIssues();
-    // eslint-disable-next-line
-  }, [tab]);
+    setHeaderData({ projectName: tab === 'created' ? 'Issues (Created)' : 'Issue Search' });
+    return () => clearHeaderData();
+  }, [tab, setHeaderData, clearHeaderData]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -51,7 +51,6 @@ export default function IssuesPage() {
 
   return (
     <div className="admin-page">
-      <Navbar />
       <div className="admin-container" style={{ maxWidth: 1000 }}>
         <div className="admin-section-header" style={{ marginBottom: 12 }}>
           <div>

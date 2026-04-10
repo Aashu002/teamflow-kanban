@@ -305,7 +305,37 @@ body {
 .navbar-back:hover { color: var(--text-primary); }
 .navbar-back svg { width: 16px; height: 16px; }
 
-.navbar-sep { color: var(--text-muted); }
+.navbar-sep { color: var(--text-muted); opacity: 0.3; margin: 0 4px; }
+
+.navbar-breadcrumb {
+  display: flex;
+  align-items: center;
+}
+
+.navbar-back-breadcrumb {
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: all var(--transition);
+}
+
+.navbar-back-breadcrumb:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--accent-cyan);
+}
+
+.navbar-project-name-breadcrumb {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 4px 10px;
+}
 
 .navbar-brand {
   display: flex; align-items: center; gap: 8px;
@@ -2128,6 +2158,7 @@ body {
   display: flex;
   flex-direction: column;
 }
+.recharts-wrapper, .recharts-surface { background: transparent !important; }
 
 /* Panel card — wraps each section */
 .dash-panel {
