@@ -105,7 +105,6 @@ export default function CreateTaskModal({ defaultStatus, projectId, members, onC
             <div className="form-group">
               <label className="form-label">Column</label>
               <select id="task-status" name="status" className="form-select" value={form.status} onChange={handle}>
-                <option value="backlog">Backlog</option>
                 {COLUMNS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
             </div>

@@ -12,11 +12,9 @@ import api from '../api.js';
 import { socket } from '../socket.js';
 
 export const COLUMNS = [
-  { id: 'backlog',      label: 'Backlog',               color: '#64748b' },
   { id: 'open',         label: 'Open',                  color: '#3b82f6' },
   { id: 'gathering',    label: 'Gathering Requirements', color: '#8b5cf6' },
   { id: 'inprogress',   label: 'In Progress',            color: '#f59e0b' },
-
   { id: 'qa_testing',   label: 'QA Testing',             color: '#ec4899' },
   { id: 'qa_completed', label: 'QA Completed',           color: '#22c55e' },
   { id: 'stakeholder',  label: 'Stakeholder Review',     color: '#f97316' },
@@ -29,12 +27,12 @@ export default function BoardPage() {
   const navigate = useNavigate();
   const { setHeaderData, clearHeaderData } = useNavbar();
   const [project, setProject] = useState(null);
+  const [viewMode, setViewMode] = useState('board'); // 'board' or 'backlog'
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTask, setActiveTask] = useState(null);
   const [createInColumn, setCreateInColumn] = useState(null);
-  const [viewMode, setViewMode] = useState('board');
   const [filterPriority, setFilterPriority] = useState('all');
   const [filterAssignee, setFilterAssignee] = useState('all');
   const [filterType, setFilterType] = useState('all');
@@ -153,6 +151,7 @@ export default function BoardPage() {
           <button className={`admin-tab ${viewMode === 'board' ? 'active' : ''}`} style={{ padding: '4px 12px', minWidth: 80 }} onClick={() => setViewMode('board')}>Board</button>
           <button className={`admin-tab ${viewMode === 'backlog' ? 'active' : ''}`} style={{ padding: '4px 12px', minWidth: 80 }} onClick={() => setViewMode('backlog')}>Backlog ({tasks.filter(t => t.status === 'backlog').length})</button>
         </div>
+
         <div className="board-filter-group">
           <span className="board-filter-label">Type:</span>
           <select id="filter-type" className="board-filter-select" value={filterType} onChange={e => setFilterType(e.target.value)}>
@@ -223,85 +222,87 @@ export default function BoardPage() {
         </div>
       )}
 
-      {viewMode === 'board' ? (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="board-container">
-            {COLUMNS.map((col, i) => (
-              <KanbanColumn
-                key={col.id}
-                col={col}
-                tasks={tasksByCol(col.id)}
-                style={{ animationDelay: `${i * 40}ms` }}
-                onAddTask={() => setCreateInColumn(col.id)}
-              />
-            ))}
-          </div>
-          <DragOverlay>
-            {activeTask && <TaskCard task={activeTask} dragging />}
-          </DragOverlay>
-        </DndContext>
-      ) : (
-        <div className="admin-container" style={{ margin: '20px auto', maxWidth: 1000, background: 'var(--bg-surface)', padding: 20, borderRadius: 12, border: '1px solid var(--border-color)' }}>
-          <h3 style={{ marginTop: 0, marginBottom: 20, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>Backlog</span>
-            <span style={{ fontSize: 12, padding: '2px 8px', background: 'var(--bg-secondary)', borderRadius: 12, color: 'var(--text-muted)' }}>{backlogTasks.length}</span>
-          </h3>
-          {backlogTasks.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-              No issues in the backlog.
+      <div className="board-content">
+        {viewMode === 'board' ? (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            <div className="board-container">
+              {COLUMNS.map((col, i) => (
+                <KanbanColumn
+                  key={col.id}
+                  col={col}
+                  tasks={tasksByCol(col.id)}
+                  style={{ animationDelay: `${i * 40}ms` }}
+                  onAddTask={() => setCreateInColumn(col.id)}
+                />
+              ))}
             </div>
-          ) : (
-            <table className="data-table" style={{ width: '100%' }}>
-              <thead>
-                <tr>
-                  <th style={{ width: 100 }}>Key</th>
-                  <th>Title & Type</th>
-                  <th style={{ width: 140 }}>Assignee</th>
-                  <th style={{ width: 100, textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {backlogTasks.map(t => {
-                  const tm = TYPE_META[t.task_type] || TYPE_META.task;
-                  return (
-                    <tr key={t.id} style={{ cursor: 'pointer' }} onDoubleClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)}>
-                      <td onClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)}>
-                        <span className="task-id" style={{ color: 'var(--accent-purple)' }}>{t.key_prefix}-{t.task_number}</span>
-                      </td>
-                      <td onClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)}>
-                        <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-primary)' }}>
-                          {t.title}
-                          <span className={`type-badge type-${t.task_type}`} style={{ fontSize: 10, padding: '2px 6px' }}>{tm.icon} {tm.label}</span>
-                        </div>
-                      </td>
-                      <td onClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                        {t.assignee_name || 'Unassigned'}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button 
-                          className="btn btn-sm btn-secondary" 
-                          style={{ padding: '4px 8px', fontSize: 11 }}
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            try {
-                              await api.patch(`/tasks/${t.id}`, { status: 'open' });
-                              setTasks(prev => prev.map(pt => pt.id === t.id ? { ...pt, status: 'open' } : pt));
-                            } catch (err) {
-                              console.error(err);
-                            }
-                          }}
-                        >
-                          → Move to Board
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
+            <DragOverlay>
+              {activeTask && <TaskCard task={activeTask} dragging />}
+            </DragOverlay>
+          </DndContext>
+        ) : (
+          <div className="admin-container" style={{ margin: '20px auto', maxWidth: 1000, background: 'var(--bg-surface)', padding: 20, borderRadius: 12, border: '1px solid var(--border-color)' }}>
+            <h3 style={{ marginTop: 0, marginBottom: 20, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>Backlog</span>
+              <span style={{ fontSize: 12, padding: '2px 8px', background: 'var(--bg-secondary)', borderRadius: 12, color: 'var(--text-muted)' }}>{backlogTasks.length}</span>
+            </h3>
+            {backlogTasks.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+                No issues in the backlog.
+              </div>
+            ) : (
+              <table className="data-table" style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: 100 }}>Key</th>
+                    <th>Title & Type</th>
+                    <th style={{ width: 140 }}>Assignee</th>
+                    <th style={{ width: 120, textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {backlogTasks.map(t => {
+                    const tm = TYPE_META[t.task_type] || TYPE_META.task;
+                    return (
+                      <tr key={t.id} style={{ cursor: 'pointer' }} onDoubleClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)}>
+                        <td onClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)}>
+                          <span className="task-id" style={{ color: 'var(--accent-purple)' }}>{t.key_prefix}-{t.task_number}</span>
+                        </td>
+                        <td onClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)}>
+                          <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-primary)' }}>
+                            {t.title}
+                            <span className={`type-badge type-${t.task_type}`} style={{ fontSize: 10, padding: '2px 6px' }}>{tm.icon} {tm.label}</span>
+                          </div>
+                        </td>
+                        <td onClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                          {t.assignee_name || 'Unassigned'}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button 
+                            className="btn btn-sm btn-secondary" 
+                            style={{ padding: '4px 8px', fontSize: 11 }}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                await api.patch(`/tasks/${t.id}`, { status: 'open' });
+                                setTasks(prev => prev.map(pt => pt.id === t.id ? { ...pt, status: 'open' } : pt));
+                              } catch (err) {
+                                console.error(err);
+                              }
+                            }}
+                          >
+                            → Move to Board
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </div>
 
       {createInColumn && (
         <CreateTaskModal

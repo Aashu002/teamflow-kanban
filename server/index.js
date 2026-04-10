@@ -5,12 +5,16 @@ const http = require('http');
 const { Server } = require('socket.io');
 
 const app = express();
-const PORT = 3001;
+const isProd = process.env.NODE_ENV === 'production';
+const PORT = process.env.PORT || 3001;
 
 // Setup HTTP server and Socket.io
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: 'http://localhost:5173', credentials: true }
+  cors: { 
+    origin: isProd ? true : 'http://localhost:5173', 
+    credentials: true 
+  }
 });
 
 // Attach io to the Express app so routers can broadcast
@@ -27,7 +31,10 @@ io.on('connection', (socket) => {
   });
 });
 
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+app.use(cors({ 
+  origin: isProd ? true : 'http://localhost:5173', 
+  credentials: true 
+}));
 app.use(express.json());
 
 // Serve uploaded files statically
@@ -42,6 +49,18 @@ app.use('/api/dashboard', require('./routes/dashboard'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
+// ─── PRODUCTION ──────────────────────────────────────────────────────────────
+if (isProd) {
+  const distPath = path.join(__dirname, '../client/dist');
+  app.use(express.static(distPath));
+  
+  // SPA fallback: All routes not starting with /api or /uploads serve index.html
+  app.get('*', (req, res) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) return res.status(404).json({ error: 'Not found' });
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
 server.listen(PORT, () => {
-  console.log(`🚀 TeamFlow API & WebSockets running on http://localhost:${PORT}`);
+  console.log(`🚀 TeamFlow ${isProd ? 'Production' : 'Dev'} Server running on http://localhost:${PORT}`);
 });
