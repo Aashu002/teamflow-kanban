@@ -32,7 +32,7 @@ function selectTask(id) {
   return db.prepare(`
     SELECT t.*,
       (SELECT SUM(hours) FROM hour_logs WHERE task_id = t.id) as totalHoursLogged,
-      p.key_prefix,
+      p.key_prefix, p.owner_id as project_owner_id,
       creator.name as creator_name, creator.avatar_color as creator_color,
       assignee.name as assignee_name, assignee.avatar_color as assignee_color,
       parent.title as parent_title, parent.task_number as parent_task_number,
@@ -348,10 +348,15 @@ router.post('/:id/move', authMiddleware, (req, res) => {
 
 // DELETE /api/tasks/:id
 router.delete('/:id', authMiddleware, (req, res) => {
-  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+  const task = selectTask(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
-  if (req.user.role !== 'admin' && task.creator_id !== req.user.id) {
-    return res.status(403).json({ error: 'Only creator or admin can delete' });
+  
+  const canDelete = req.user.role === 'admin' 
+    || task.creator_id === req.user.id 
+    || task.project_owner_id === req.user.id;
+
+  if (!canDelete) {
+    return res.status(403).json({ error: 'Only creator, project lead or admin can delete' });
   }
   db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
   

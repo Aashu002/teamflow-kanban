@@ -24,7 +24,7 @@ function ProtectedRoute({ children }) {
 function AdminRoute({ children }) {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== 'admin') return <Navigate to="/home" replace />;
+  if (user.role !== 'admin' && user.role !== 'lead') return <Navigate to="/home" replace />;
   return children;
 }
 

@@ -97,11 +97,11 @@ function DonutChart({ statusCounts = [], totalTickets = 0 }) {
   return (
     <div className="donut-chart-wrap">
       {/* Chart + Legend side by side */}
-      <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
 
         {/* SVG Donut */}
         <div style={{ flexShrink: 0 }}>
-          <svg viewBox="0 0 200 200" width={190} height={190} style={{ overflow: 'visible' }}>
+          <svg viewBox="0 0 200 200" width={150} height={150} style={{ overflow: 'visible' }}>
             {data.length === 0 ? (
               <>
                 <circle cx={cx} cy={cy} r={outerR} fill="rgba(255,255,255,0.04)" stroke="var(--border)" strokeWidth="1"/>
@@ -154,7 +154,7 @@ function DonutChart({ statusCounts = [], totalTickets = 0 }) {
         </div>
 
         {/* Legend */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           {data.map(d => {
             const pct = Math.round((d.count / total) * 100);
             const isSelected = selected === d.id;
@@ -163,31 +163,32 @@ function DonutChart({ statusCounts = [], totalTickets = 0 }) {
                 key={d.id}
                 onClick={() => handleClick(d.id)}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '5px 8px', borderRadius: 6, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '4px 6px', borderRadius: 6, cursor: 'pointer',
                   background: isSelected ? d.color + '18' : 'transparent',
                   border: `1px solid ${isSelected ? d.color + '50' : 'transparent'}`,
                   transition: 'all 0.15s',
                   opacity: selected && !isSelected ? 0.45 : 1,
+                  minWidth: 0
                 }}
               >
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: d.color, flexShrink: 0 }}/>
-                <span style={{ flex: 1, fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: d.color, flexShrink: 0 }}/>
+                <span style={{ flex: 1, fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {d.label}
                 </span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: d.color, flexShrink: 0 }}>{d.count}</span>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)', width: 28, textAlign: 'right', flexShrink: 0 }}>{pct}%</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: d.color, flexShrink: 0, marginLeft: 'auto' }}>{d.count}</span>
+                <span style={{ fontSize: 9, color: 'var(--text-muted)', width: 26, textAlign: 'right', flexShrink: 0 }}>{pct}%</span>
               </div>
             );
           })}
           {data.length === 0 && (
-            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No tickets yet.</p>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>No tickets yet.</p>
           )}
           {selected && (
             <button
               onClick={() => setSelected(null)}
               className="btn btn-ghost btn-sm"
-              style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: 11 }}
+              style={{ marginTop: 2, color: 'var(--text-muted)', fontSize: 10 }}
             >
               ✕ Clear selection
             </button>

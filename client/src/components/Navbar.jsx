@@ -157,9 +157,9 @@ export default function Navbar() {
                 <button className="user-dropdown-item" onClick={() => { setIsUserDropdownOpen(false); navigate('/profile'); }}>
                   <span className="user-dropdown-icon">👤</span> My Profile
                 </button>
-                {isAdmin && (
+                {(isAdmin || user?.role === 'lead') && (
                   <button className="user-dropdown-item" onClick={() => { setIsUserDropdownOpen(false); navigate('/admin'); }}>
-                    <span className="user-dropdown-icon">⚙️</span> Admin Section
+                    <span className="user-dropdown-icon">⚙️</span> Management
                   </button>
                 )}
                 <div className="user-dropdown-divider"></div>

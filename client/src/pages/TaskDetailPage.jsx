@@ -646,7 +646,7 @@ export default function TaskDetailPage() {
   if (loading) return <div className="loading-screen"><div className="loading-spinner" /></div>;
   if (!task)   return null;
 
-  const canEdit   = isAdmin || task.creator_id === user?.id || task.assignee_id === user?.id;
+  const canEdit   = isAdmin || task.creator_id === user?.id || task.assignee_id === user?.id || task.project_owner_id === user?.id;
   const isAssignee = task.assignee_id === user?.id;
   const tm  = TYPE_META[task.task_type] || TYPE_META.task;
   const col = COLUMNS.find(c => c.id === task.status);
@@ -737,7 +737,7 @@ export default function TaskDetailPage() {
                 🔗 Link
               </button>
             )}
-            {(isAdmin || task.creator_id === user?.id) && (
+            {(isAdmin || task.creator_id === user?.id || task.project_owner_id === user?.id) && (
               <button className="btn btn-danger btn-sm" onClick={deleteTask}>🗑 Delete</button>
             )}
           </div>
