@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import api from '../api.js';
 
 export default function CreateProjectModal({ onClose, onCreated }) {
-  const [form, setForm] = useState({ name: '', description: '' });
+  const [form, setForm] = useState({ name: '', description: '', estimated_completion_date: '', project_goal: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const handle = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
@@ -32,6 +32,14 @@ export default function CreateProjectModal({ onClose, onCreated }) {
           <div className="form-group">
             <label className="form-label">Description</label>
             <textarea id="proj-desc" name="description" className="form-textarea" placeholder="Brief overview of this project…" value={form.description} onChange={handle} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Project Goal</label>
+            <textarea name="project_goal" className="form-textarea" placeholder="What is the main objective of this project?" value={form.project_goal} onChange={handle} rows="2" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Target Launch Date</label>
+            <input type="date" name="estimated_completion_date" className="form-input" value={form.estimated_completion_date} onChange={handle} />
           </div>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
             You can add team members from the Admin panel after creating the project.

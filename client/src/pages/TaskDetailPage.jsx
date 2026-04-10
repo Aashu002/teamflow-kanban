@@ -1,106 +1,288 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { TYPE_META } from '../components/TaskCard.jsx';
 import { COLUMNS } from './BoardPage.jsx';
-import api from '../api.js';
 import Navbar from '../components/Navbar.jsx';
+import api from '../api.js';
+import { socket } from '../socket.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function initials(name) {
-  return name?.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase() || '?';
+function initials(n) {
+  return n?.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
 }
 
-function formatDate(dt) {
+function Avatar({ name, color, size = 28 }) {
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      background: color || '#7c3aed', display: 'flex',
+      alignItems: 'center', justifyContent: 'center',
+      fontSize: size * 0.36, fontWeight: 700, color: '#fff', flexShrink: 0,
+    }}>
+      {initials(name)}
+    </div>
+  );
+}
+
+function fmtDate(dt) {
   if (!dt) return '—';
   return new Date(dt).toLocaleString('en-US', {
-    day: 'numeric', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
   });
 }
 
-function formatBytes(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+function fmtHours(h) {
+  if (!h || h === 0) return '0h';
+  const whole = Math.floor(h);
+  const mins  = Math.round((h - whole) * 60);
+  return mins > 0 ? `${whole}h ${mins}m` : `${whole}h`;
 }
 
-function fileIcon(mime = '') {
-  if (mime.startsWith('image/')) return '🖼️';
-  if (mime.includes('pdf')) return '📄';
-  if (mime.includes('zip') || mime.includes('tar')) return '📦';
-  if (mime.includes('word') || mime.includes('document')) return '📝';
-  if (mime.includes('sheet') || mime.includes('excel')) return '📊';
-  if (mime.startsWith('video/')) return '🎬';
-  return '📎';
+// ─── Sidebar Card Section ─────────────────────────────────────────────────────
+
+function SideCard({ title, icon, children }) {
+  return (
+    <div className="td-side-card">
+      <div className="td-side-card-header">
+        <span className="td-side-card-icon">{icon}</span>
+        <span className="td-side-card-title">{title}</span>
+      </div>
+      <div className="td-side-card-body">{children}</div>
+    </div>
+  );
 }
 
-const STATUS_COLORS = {
-  open:          { bg: 'rgba(59,130,246,0.15)',  text: '#60a5fa' },
-  gathering:     { bg: 'rgba(139,92,246,0.15)',  text: '#a78bfa' },
-  inprogress:    { bg: 'rgba(245,158,11,0.15)',  text: '#fbbf24' },
-  review:        { bg: 'rgba(6,182,212,0.15)',   text: '#22d3ee' },
-  qa_testing:    { bg: 'rgba(236,72,153,0.15)',  text: '#f472b6' },
-  qa_completed:  { bg: 'rgba(34,197,94,0.15)',   text: '#4ade80' },
-  stakeholder:   { bg: 'rgba(249,115,22,0.15)',  text: '#fb923c' },
-  done:          { bg: 'rgba(100,116,139,0.2)',  text: '#94a3b8' },
-};
+// ─── Drag & Drop Attachment Zone ──────────────────────────────────────────────
 
-// ─── Comment Item ─────────────────────────────────────────────────────────────
+function DropZone({ onAttach, compact = false }) {
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef(null);
 
-function CommentItem({ comment, currentUser, isAdmin, onDelete, onEdit }) {
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(comment.content);
-  const [saving, setSaving] = useState(false);
-  const canModify = comment.user_id === currentUser?.id || isAdmin;
-
-  const saveEdit = async () => {
-    if (!text.trim()) return;
-    setSaving(true);
-    try { await onEdit(comment.id, text.trim()); setEditing(false); }
-    finally { setSaving(false); }
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    Array.from(e.dataTransfer.files).forEach(f => onAttach(f));
   };
 
   return (
-    <div className="comment-item">
-      <div className="user-avatar" style={{ background: comment.user_color || '#7c3aed', width: 32, height: 32, fontSize: 12, flexShrink: 0 }}>
-        {initials(comment.user_name)}
+    <div
+      className={`td-drop-zone ${dragging ? 'td-drop-zone--active' : ''} ${compact ? 'td-drop-zone--compact' : ''}`}
+      onDragOver={e => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); }}
+      onDrop={handleDrop}
+      onClick={() => inputRef.current?.click()}
+    >
+      <input ref={inputRef} type="file" multiple style={{ display: 'none' }}
+        onChange={e => Array.from(e.target.files).forEach(f => onAttach(f))} />
+      <div className="td-drop-zone-content">
+        <span className="td-drop-zone-icon">{dragging ? '📂' : '📎'}</span>
+        <span className="td-drop-zone-text">
+          {dragging ? 'Drop to attach' : compact ? 'Attach files' : 'Drop files here or click to browse'}
+        </span>
       </div>
-      <div className="comment-body">
-        <div className="comment-header">
-          <span className="comment-author">{comment.user_name}</span>
-          <span className="comment-time">{formatDate(comment.created_at)}</span>
-          {comment.updated_at !== comment.created_at && <span className="comment-edited">(edited)</span>}
+    </div>
+  );
+}
+
+// ─── Comment Rich-Text Editor ─────────────────────────────────────────────────
+
+function CommentEditor({ value, onChange, onAttach, placeholder = 'Add a comment…', rows = 3, autoFocus = false }) {
+  const taRef  = useRef(null);
+  const filRef = useRef(null);
+
+  const fmt = (prefix, suffix = prefix) => {
+    const ta = taRef.current;
+    if (!ta) return;
+    const { selectionStart: s, selectionEnd: e } = ta;
+    const selected = value.slice(s, e) || 'text';
+    const newVal = value.slice(0, s) + prefix + selected + suffix + value.slice(e);
+    onChange(newVal);
+    setTimeout(() => {
+      ta.focus();
+      ta.selectionStart = s + prefix.length;
+      ta.selectionEnd   = s + prefix.length + selected.length;
+    }, 0);
+  };
+
+  const handleAttachFile = (file) => {
+    if (onAttach) onAttach(file, (url, name) => {
+      onChange(value + `\n[${name}](${url})`);
+    });
+  };
+
+  return (
+    <div className="ce-wrap">
+      <div className="ce-toolbar">
+        <button type="button" className="ce-btn" onClick={() => fmt('**')} title="Bold"><b>B</b></button>
+        <button type="button" className="ce-btn ce-italic" onClick={() => fmt('_')} title="Italic">I</button>
+        <button type="button" className="ce-btn" onClick={() => fmt('`')} title="Inline code">{'`'}</button>
+        <button type="button" className="ce-btn" onClick={() => fmt('```\n', '\n```')} title="Code block">{'{ }'}</button>
+        <button type="button" className="ce-btn" onClick={() => fmt('~~')} title="Strikethrough">S̶</button>
+        <div className="ce-divider"/>
+        <button type="button" className="ce-btn" title="Attach file"
+          onClick={() => filRef.current?.click()}>📎</button>
+        <input ref={filRef} type="file" multiple style={{ display: 'none' }}
+          onChange={e => Array.from(e.target.files).forEach(f => handleAttachFile(f))} />
+      </div>
+      <textarea
+        ref={taRef}
+        className="ce-textarea"
+        rows={rows}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoFocus={autoFocus}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            taRef.current?.dispatchEvent(new CustomEvent('ce-submit', { bubbles: true }));
+          }
+        }}
+      />
+      <div className="ce-footer">
+        <span className="ce-hint">⌘+Enter to submit · Markdown supported</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Log Hours Modal ──────────────────────────────────────────────────────────
+
+function LogHoursModal({ taskId, onLogged, onClose }) {
+  const [hours, setHours] = useState('');
+  const [note,  setNote]  = useState('');
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  const submit = async () => {
+    const h = parseFloat(hours);
+    if (!h || h <= 0) { toast({ message: 'Enter valid hours', type: 'error' }); return; }
+    setSaving(true);
+    try {
+      const { data } = await api.post(`/tasks/${taskId}/log-hours`, { hours: h, note });
+      onLogged(data);
+      onClose();
+      toast({ message: `Logged ${fmtHours(h)}`, type: 'success' });
+    } catch { toast({ message: 'Failed to log hours', type: 'error' }); }
+    finally  { setSaving(false); }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ maxWidth: 400, width: '90vw' }}>
+        <div className="modal-header">
+          <div className="modal-title">⏱ Log Hours</div>
+          <button className="modal-close" onClick={onClose}>✕</button>
         </div>
-        {editing ? (
-          <>
-            <textarea
-              className="comment-input" value={text}
-              onChange={e => setText(e.target.value)}
-              autoFocus style={{ width: '100%', marginBottom: 8 }}
-            />
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-primary btn-sm" onClick={saveEdit} disabled={saving}>
-                {saving ? 'Saving…' : 'Save'}
-              </button>
-              <button className="btn btn-secondary btn-sm" onClick={() => { setEditing(false); setText(comment.content); }}>
-                Cancel
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className="comment-content">{comment.content}</div>
-        )}
-        {canModify && !editing && (
-          <div className="comment-actions">
-            <button className="comment-action-btn" onClick={() => setEditing(true)}>Edit</button>
-            <button className="comment-action-btn" style={{ color: '#f87171' }} onClick={() => onDelete(comment.id)}>
-              Delete
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label className="form-label">Hours spent <span style={{ color: '#f87171' }}>*</span></label>
+            <input type="number" min="0.25" step="0.25" className="form-input"
+              placeholder="e.g. 2.5" value={hours} onChange={e => setHours(e.target.value)} autoFocus />
+          </div>
+          <div>
+            <label className="form-label">Note (optional)</label>
+            <textarea className="form-input" rows={3} placeholder="What did you work on?"
+              value={note} onChange={e => setNote(e.target.value)} style={{ resize: 'vertical' }} />
+          </div>
+          <div className="modal-actions">
+            <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
+            <button className="btn btn-primary"   onClick={submit}  disabled={saving}>
+              {saving ? 'Logging…' : '+ Log Hours'}
             </button>
           </div>
-        )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Link Task Modal ──────────────────────────────────────────────────────────
+
+function LinkTaskModal({ sourceTaskId, onLinked, onClose }) {
+  const [search, setSearch] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [linkType, setLinkType] = useState('relates_to');
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (!search.trim()) { setResults([]); return; }
+    const delay = setTimeout(() => {
+      setLoading(true);
+      api.get('/tasks/search', { params: { search: search.trim() } })
+        .then(res => setResults(res.data.filter(t => t.id !== sourceTaskId)))
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }, 400);
+    return () => clearTimeout(delay);
+  }, [search, sourceTaskId]);
+
+  const handleLink = async (targetId) => {
+    setSaving(true);
+    try {
+      const { data } = await api.post(`/tasks/${sourceTaskId}/links`, { linkedTaskId: targetId, linkType });
+      onLinked(data);
+      toast({ message: 'Task linked', type: 'success' });
+      onClose();
+    } catch (err) {
+      toast({ message: err.response?.data?.error || 'Failed to link task', type: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ maxWidth: 500, width: '90vw' }}>
+        <div className="modal-header">
+          <div className="modal-title">🔗 Link Issue</div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label className="form-label">Link Type</label>
+            <select className="form-select" value={linkType} onChange={e => setLinkType(e.target.value)}>
+              <option value="relates_to">Relates to</option>
+              <option value="blocks">Blocks</option>
+              <option value="is_blocked_by">Is blocked by</option>
+              <option value="clones">Clones</option>
+            </select>
+          </div>
+          <div>
+            <label className="form-label">Search for task</label>
+            <input type="text" className="form-input" placeholder="Type task title or key (e.g. TF-123)"
+              value={search} onChange={e => setSearch(e.target.value)} autoFocus />
+          </div>
+          
+          <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-elevated)' }}>
+            {loading ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>Searching...</div> : (
+              results.length === 0 ? (
+                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>
+                  {search.trim() ? 'No tasks found.' : 'Type to search...'}
+                </div>
+              ) : (
+                results.map(r => (
+                  <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{r.title}</div>
+                      <div style={{ fontSize: 11, color: 'var(--accent-purple)' }}>{r.key_prefix}-{r.task_number}</div>
+                    </div>
+                    <button className="btn btn-secondary btn-sm" disabled={saving} onClick={() => handleLink(r.id)}>
+                      Select
+                    </button>
+                  </div>
+                ))
+              )
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -109,606 +291,684 @@ function CommentItem({ comment, currentUser, isAdmin, onDelete, onEdit }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function TaskDetailPage() {
-  const { projectId, taskId } = useParams();
-  const navigate = useNavigate();
+  const { projectId, taskKey } = useParams();
+  const navigate  = useNavigate();
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
 
-  const [task, setTask] = useState(null);
-  const [project, setProject] = useState(null);
-  const [members, setMembers] = useState([]);
-  const [allTasks, setAllTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const taskNumber = parseInt(taskKey?.split('-').pop(), 10);
 
-  // Title
-  const [title, setTitle] = useState('');
-  // Description
-  const [desc, setDesc] = useState('');
-  const [descEditing, setDescEditing] = useState(false);
+  const [task, setTask]            = useState(null);
+  const taskRef = useRef(null);
+  const [loading, setLoading]      = useState(true);
+  const [users, setUsers]          = useState([]);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft,   setTitleDraft]   = useState('');
+  const [editingDesc,  setEditingDesc]  = useState(false);
+  const [descDraft,    setDescDraft]    = useState('');
+  const [commentText,  setCommentText]  = useState('');
+  const [editingComment, setEditingComment]   = useState(null);
+  const [editCommentText, setEditCommentText] = useState('');
+  const [showLogHours, setShowLogHours] = useState(false);
+  const [editingEst, setEditingEst]  = useState(false);
+  const [estDate, setEstDate]        = useState('');
+  const [estTime, setEstTime]        = useState('');
+  const [showLinkModal, setShowLinkModal] = useState(false);
 
-  // Comments
-  const [newComment, setNewComment] = useState('');
-  const [postingComment, setPostingComment] = useState(false);
-  const commentRef = useRef(null);
-
-  // Attachments
-  const [uploading, setUploading] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
-  const fileInputRef = useRef(null);
-
-  const load = useCallback(async () => {
+  const loadData = useCallback(async () => {
     try {
-      const [taskRes, projRes, tasksRes] = await Promise.all([
-        api.get(`/tasks/${taskId}`),
-        api.get(`/projects/${projectId}`),
-        api.get(`/tasks?projectId=${projectId}`)
-      ]);
-      setTask(taskRes.data);
-      setTitle(taskRes.data.title);
-      setDesc(taskRes.data.description || '');
-      setProject(projRes.data);
-      setMembers(projRes.data.members || []);
-      setAllTasks(tasksRes.data.filter(t => t.id !== parseInt(taskId)));
+      const { data } = await api.get(`/tasks/by-key/${projectId}/${taskNumber}`);
+      setTask(data);
+      taskRef.current = data;
+      const ec = data.estimated_completion;
+      if (ec) {
+        const d = new Date(ec);
+        setEstDate(d.toISOString().slice(0, 10));
+        setEstTime(d.toISOString().slice(11, 16));
+      }
     } catch {
+      toast({ message: 'Task not found', type: 'error' });
       navigate(`/projects/${projectId}/board`);
-    } finally {
-      setLoading(false);
-    }
-  }, [taskId, projectId, navigate]);
+    } finally { setLoading(false); }
+  }, [projectId, taskNumber, navigate, toast]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    loadData();
 
-  // ── Sidebar patch helper ──────────────────────────────────────────────────
+    socket.emit('join_project', projectId);
 
-  const patchTask = async (fields) => {
-    setSaving(true);
+    const onTaskUpdated = (updatedTask) => {
+      if (updatedTask.id === taskRef.current?.id) {
+        setTask(prev => ({ ...prev, ...updatedTask }));
+        taskRef.current = { ...taskRef.current, ...updatedTask };
+      }
+    };
+    
+    // Simplest way to sync side-data effortlessly is to just re-fetch the task data,
+    // or optionally we manually inject the comments. Re-fetching provides total consistency.
+    const onComponentUpdate = () => loadData();
+
+    socket.on('task_updated', onTaskUpdated);
+    socket.on('comment_added', onComponentUpdate);
+    socket.on('comment_updated', onComponentUpdate);
+    socket.on('comment_deleted', onComponentUpdate);
+
+    return () => {
+      socket.emit('leave_project', projectId);
+      socket.off('task_updated', onTaskUpdated);
+      socket.off('comment_added', onComponentUpdate);
+      socket.off('comment_updated', onComponentUpdate);
+      socket.off('comment_deleted', onComponentUpdate);
+    };
+  }, [projectId, loadData]);
+
+  useEffect(() => { api.get('/users').then(r => setUsers(r.data)).catch(() => {}); }, []);
+
+  const patch = useCallback(async (body) => {
+    const { data } = await api.patch(`/tasks/${task.id}`, body);
+    setTask(prev => ({ ...prev, ...data }));
+  }, [task?.id]);
+
+  const saveTitle = async () => {
+    const t = titleDraft.trim();
+    if (t && t !== task.title) { try { await patch({ title: t }); } catch {} }
+    setEditingTitle(false);
+  };
+
+  const saveDesc = async () => {
+    try { await patch({ description: descDraft }); } catch {}
+    setEditingDesc(false);
+  };
+
+  const saveEstimated = async () => {
+    if (!estDate) { setEditingEst(false); return; }
+    const dt = estTime ? `${estDate}T${estTime}:00` : `${estDate}T00:00:00`;
+    try { await patch({ estimated_completion: dt }); toast({ message: 'Saved', type: 'success' }); }
+    catch {}
+    setEditingEst(false);
+  };
+
+  const addComment = async () => {
+    const c = commentText.trim();
+    if (!c) return;
     try {
-      const { data } = await api.patch(`/tasks/${taskId}`, fields);
-      setTask(prev => ({ ...prev, ...data }));
-    } catch (err) {
-      toast({ message: err.response?.data?.error || 'Failed to update', type: 'error' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // ── Title blur save ───────────────────────────────────────────────────────
-
-  const handleTitleBlur = () => {
-    const trimmed = title.trim();
-    if (trimmed && trimmed !== task.title) patchTask({ title: trimmed });
-  };
-
-  // ── Description ───────────────────────────────────────────────────────────
-
-  const handleDescSave = () => {
-    setDescEditing(false);
-    if (desc !== (task.description || '')) patchTask({ description: desc });
-  };
-
-  // ── Comments ──────────────────────────────────────────────────────────────
-
-  const postComment = async () => {
-    const trimmed = newComment.trim();
-    if (!trimmed) return;
-    setPostingComment(true);
-    try {
-      const { data } = await api.post(`/tasks/${taskId}/comments`, { content: trimmed });
+      const { data } = await api.post(`/tasks/${task.id}/comments`, { content: c });
       setTask(prev => ({ ...prev, comments: [...(prev.comments || []), data] }));
-      setNewComment('');
-    } catch (err) {
-      toast({ message: 'Failed to post comment', type: 'error' });
-    } finally {
-      setPostingComment(false);
-    }
+      setCommentText('');
+    } catch { toast({ message: 'Failed to add comment', type: 'error' }); }
   };
 
-  const editComment = async (cid, content) => {
-    const { data } = await api.patch(`/tasks/${taskId}/comments/${cid}`, { content });
-    setTask(prev => ({ ...prev, comments: prev.comments.map(c => c.id === cid ? data : c) }));
+  const saveComment = async (cid) => {
+    const c = editCommentText.trim();
+    if (!c) return;
+    try {
+      const { data } = await api.patch(`/tasks/${task.id}/comments/${cid}`, { content: c });
+      setTask(prev => ({ ...prev, comments: prev.comments.map(x => x.id === cid ? data : x) }));
+      setEditingComment(null);
+    } catch {}
   };
 
   const deleteComment = async (cid) => {
     if (!confirm('Delete this comment?')) return;
-    await api.delete(`/tasks/${taskId}/comments/${cid}`);
-    setTask(prev => ({ ...prev, comments: prev.comments.filter(c => c.id !== cid) }));
+    try {
+      await api.delete(`/tasks/${task.id}/comments/${cid}`);
+      setTask(prev => ({ ...prev, comments: prev.comments.filter(x => x.id !== cid) }));
+    } catch {}
   };
 
-  // ── Attachments ───────────────────────────────────────────────────────────
+  const onNewHourLog = (log) => {
+    const updated = [log, ...(task.hourLogs || [])];
+    setTask(prev => ({ ...prev, hourLogs: updated, totalHoursLogged: updated.reduce((s, l) => s + l.hours, 0) }));
+  };
 
-  const uploadFile = async (file) => {
-    if (file.size > 20 * 1024 * 1024) { toast({ message: 'File too large (max 20 MB)', type: 'error' }); return; }
-    setUploading(true);
+  const deleteHourLog = async (logId) => {
+    if (!confirm('Remove this log?')) return;
     try {
-      const form = new FormData();
-      form.append('file', file);
-      const { data } = await api.post(`/tasks/${taskId}/attachments`, form, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      await api.delete(`/tasks/${task.id}/log-hours/${logId}`);
+      const updated = task.hourLogs.filter(l => l.id !== logId);
+      setTask(prev => ({ ...prev, hourLogs: updated, totalHoursLogged: updated.reduce((s, l) => s + l.hours, 0) }));
+    } catch {}
+  };
+
+  const handleAttach = async (file, cb) => {
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const { data } = await api.post(`/tasks/${task.id}/attachments`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
       setTask(prev => ({ ...prev, attachments: [...(prev.attachments || []), data] }));
-      toast({ message: `Attached "${file.name}"`, type: 'success', duration: 3000 });
-    } catch (err) {
-      toast({ message: err.response?.data?.error || 'Upload failed', type: 'error' });
-    } finally { setUploading(false); }
+      if (cb) cb(`/uploads/${data.filename}`, data.original_name);
+      toast({ message: 'Attached!', type: 'success' });
+    } catch { toast({ message: 'Upload failed', type: 'error' }); }
   };
 
   const deleteAttachment = async (aid) => {
-    if (!confirm('Delete this attachment?')) return;
-    await api.delete(`/tasks/${taskId}/attachments/${aid}`);
-    setTask(prev => ({ ...prev, attachments: prev.attachments.filter(a => a.id !== aid) }));
+    if (!confirm('Remove attachment?')) return;
+    try {
+      await api.delete(`/tasks/${task.id}/attachments/${aid}`);
+      setTask(prev => ({ ...prev, attachments: prev.attachments.filter(a => a.id !== aid) }));
+    } catch {}
   };
 
-  const handleDrop = (e) => {
-    e.preventDefault(); setDragActive(false);
-    const file = e.dataTransfer.files[0];
-    if (file) uploadFile(file);
+  const deleteTask = async () => {
+    if (!confirm(`Delete "${task.title}"?`)) return;
+    try {
+      await api.delete(`/tasks/${task.id}`);
+      toast({ message: 'Task deleted', type: 'success' });
+      navigate(`/projects/${projectId}/board`);
+    } catch { toast({ message: 'Failed to delete task', type: 'error' }); }
   };
 
-  const handleDelete = async () => {
-    if (!confirm(`Permanently delete ${task.key_prefix}-${task.task_number}?`)) return;
-    await api.delete(`/tasks/${taskId}`);
-    navigate(`/projects/${projectId}/board`);
+  const onNewLink = (link) => {
+    setTask(prev => ({ ...prev, links: [...(prev.links || []), link] }));
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
+  const deleteLink = async (linkId) => {
+    if (!confirm('Remove this link?')) return;
+    try {
+      await api.delete(`/tasks/${task.id}/links/${linkId}`);
+      setTask(prev => ({ ...prev, links: prev.links.filter(l => l.id !== linkId) }));
+    } catch {}
+  };
 
   if (loading) return <div className="loading-screen"><div className="loading-spinner" /></div>;
-  if (!task) return null;
+  if (!task)   return null;
 
-  const typeMeta = TYPE_META[task.task_type] || TYPE_META.task;
-  const colLabel = COLUMNS.find(c => c.id === task.status)?.label || task.status;
-  const colColor = STATUS_COLORS[task.status] || STATUS_COLORS.open;
-  const isDone = task.status === 'done';
-  const canDelete = isAdmin || task.creator_id === user?.id;
+  const canEdit   = isAdmin || task.creator_id === user?.id || task.assignee_id === user?.id;
+  const isAssignee = task.assignee_id === user?.id;
+  const tm  = TYPE_META[task.task_type] || TYPE_META.task;
+  const col = COLUMNS.find(c => c.id === task.status);
+  const hoursLogged = task.totalHoursLogged || 0;
+  const hoursEst    = task.hours_estimated  || 0;
+  const hoursPct    = hoursEst > 0 ? Math.min((hoursLogged / hoursEst) * 100, 100) : 0;
+  const estDisplay  = task.estimated_completion
+    ? new Date(task.estimated_completion).toLocaleString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      })
+    : null;
 
   return (
     <div className="task-detail-page">
-      <Navbar
-        projectName={project?.name}
-        onBack={() => navigate(`/projects/${projectId}/board`)}
-      />
+      <Navbar projectName={task.key_prefix} onBack={() => navigate(`/projects/${projectId}/board`)} />
 
-      <div className="task-detail-body">
+      <div className="td-layout">
+        {/* ── MAIN CONTENT ── */}
+        <div className="td-main">
 
-        {/* ═══════════ MAIN ═══════════ */}
-        <div className="task-detail-main">
-
-          {/* Breadcrumb */}
-          <div className="task-breadcrumb" style={{ marginBottom: 16 }}>
-            <button onClick={() => navigate(`/projects/${projectId}/board`)}>{project?.name}</button>
-            <span>›</span>
-            {task.parent_id && task.parent_task_number && (
+          {/* Breadcrumbs: OGLA › OGLA-5 › OGLA-6 */}
+          <nav className="td-breadcrumbs">
+            <span
+              className="td-crumb td-crumb--link"
+              onClick={() => navigate(`/projects/${projectId}/board`)}
+              title="Back to board"
+            >
+              {task.key_prefix}
+            </span>
+            {task.parent_id && task.parent_title && (
               <>
-                <Link to={`/projects/${projectId}/tasks/${task.parent_id}`}
-                  style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>
-                  {task.key_prefix}-{task.parent_task_number}
-                </Link>
-                <span>›</span>
+                <span className="td-crumb-arrow">›</span>
+                <span
+                  className="td-crumb td-crumb--link"
+                  onClick={() => navigate(`/projects/${projectId}/tasks/${task.parent_key_prefix}-${task.parent_task_number}`)}
+                >
+                  {task.parent_key_prefix}-{task.parent_task_number}
+                </span>
               </>
             )}
-            <span style={{ color: 'var(--accent-purple)', fontWeight: 600 }}>
-              {task.key_prefix}-{task.task_number}
-            </span>
-            {saving && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>Saving…</span>}
-          </div>
+            <span className="td-crumb-arrow">›</span>
+            <span className="td-crumb td-crumb--current">{task.key_prefix}-{task.task_number}</span>
+          </nav>
 
           {/* Title */}
-          <textarea
-            className="task-title-input"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            onBlur={handleTitleBlur}
-            rows={1}
-            onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
-          />
+          <div className="td-title-wrap">
+            {editingTitle ? (
+              <input
+                className="td-title-input"
+                value={titleDraft}
+                onChange={e => setTitleDraft(e.target.value)}
+                onBlur={saveTitle}
+                onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditingTitle(false); }}
+                autoFocus
+              />
+            ) : (
+              <h1
+                className="td-title"
+                onClick={() => canEdit && (setTitleDraft(task.title), setEditingTitle(true))}
+                title={canEdit ? 'Click to edit title' : undefined}
+              >
+                {task.title}
+              </h1>
+            )}
+          </div>
 
-          {/* Action bar */}
-          <div className="task-actions-bar">
-            {/* Status button */}
-            <button
-              className="status-btn"
-              style={{ background: colColor.bg, color: colColor.text, border: `1px solid ${colColor.text}30` }}
-              title="Change status in the sidebar →"
-            >
-              {colLabel}
-            </button>
-
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => { setDescEditing(true); setTimeout(() => document.querySelector('.task-desc-editor')?.focus(), 50); }}
-            >
-              ✏️ Edit
-            </button>
-
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => { commentRef.current?.focus(); }}
-            >
-              💬 Add Comment
-            </button>
-
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              📎 Attach
-            </button>
-
-            {canDelete && (
-              <button className="btn btn-danger btn-sm" style={{ marginLeft: 'auto' }} onClick={handleDelete}>
-                🗑 Delete
+          {/* Action bar — directly below Title */}
+          <div className="td-action-bar" style={{ margin: '16px 0 24px 0' }}>
+            {canEdit && (
+              <button className="btn btn-secondary btn-sm"
+                onClick={() => { setDescDraft(task.description || ''); setEditingDesc(true); }}>
+                ✏️ Edit
               </button>
             )}
+            {canEdit && (
+              <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
+                📎 Attach
+                <input type="file" style={{ display: 'none' }} onChange={e => handleAttach(e.target.files[0])} />
+              </label>
+            )}
+            {canEdit && (
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowLinkModal(true)}>
+                🔗 Link
+              </button>
+            )}
+            {(isAdmin || task.creator_id === user?.id) && (
+              <button className="btn btn-danger btn-sm" onClick={deleteTask}>🗑 Delete</button>
+            )}
           </div>
 
-          {/* ── Details grid (Jira style) ── */}
-          <div style={{ marginBottom: 6, fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>▼ Details</div>
-          <div className="task-details-grid">
-            <div className="task-detail-row">
-              <div className="task-detail-cell-label">Type</div>
-              <div className="task-detail-cell-value">
-                <span className={`type-badge type-${task.task_type}`}>{typeMeta.icon} {typeMeta.label}</span>
-                <select
-                  value={task.task_type}
-                  onChange={e => patchTask({ task_type: e.target.value })}
-                  style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}
-                >
-                  {Object.entries(TYPE_META).map(([k, { icon, label }]) => (
-                    <option key={k} value={k}>{icon} {label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="task-detail-row">
-              <div className="task-detail-cell-label">Priority</div>
-              <div className="task-detail-cell-value">
-                <span className={`priority-badge priority-${task.priority}`}>
-                  {task.priority === 'high' ? '🔴' : task.priority === 'medium' ? '🟡' : '🟢'} {task.priority}
-                </span>
-                <select
-                  value={task.priority}
-                  onChange={e => patchTask({ priority: e.target.value })}
-                  style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}
-                >
-                  <option value="low">🟢 Low</option>
-                  <option value="medium">🟡 Medium</option>
-                  <option value="high">🔴 High</option>
-                </select>
-              </div>
-            </div>
-            <div className="task-detail-row">
-              <div className="task-detail-cell-label">Status</div>
-              <div className="task-detail-cell-value">
-                <select
-                  value={task.status}
-                  onChange={e => patchTask({ status: e.target.value })}
-                  style={{
-                    background: colColor.bg, color: colColor.text,
-                    border: 'none', outline: 'none',
-                    fontFamily: 'var(--font)', fontSize: 12, fontWeight: 700,
-                    cursor: 'pointer', borderRadius: 4, padding: '2px 6px',
-                  }}
-                >
+          {/* Quick details row */}
+          <div className="td-details-grid">
+            {[
+              { label: 'Type', value: <span className={`type-badge type-${task.task_type}`}>{tm.icon} {tm.label}</span> },
+              { label: 'Priority', value: <span className={`priority-badge priority-${task.priority}`}>{task.priority}</span> },
+              { label: 'Status', value: (
+                <select className="td-inline-select" value={task.status}
+                  onChange={e => patch({ status: e.target.value })} disabled={!canEdit}>
                   {COLUMNS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                 </select>
+              )},
+            ].map(({ label, value }) => (
+              <div key={label} className="td-detail-row">
+                <span className="td-detail-label">{label}</span>
+                <span className="td-detail-value">{value}</span>
               </div>
-            </div>
-            <div className="task-detail-row">
-              <div className="task-detail-cell-label">Resolution</div>
-              <div className="task-detail-cell-value">
-                <span className={`resolution-badge ${isDone ? 'resolution-done' : 'resolution-unresolved'}`}>
-                  {isDone ? '✅ Done' : '⬜ Unresolved'}
-                </span>
-              </div>
-            </div>
-            {task.task_type === 'subtask' && (
-              <div className="task-detail-row">
-                <div className="task-detail-cell-label">Parent</div>
-                <div className="task-detail-cell-value">
-                  {task.parent_id ? (
-                    <Link to={`/projects/${projectId}/tasks/${task.parent_id}`}
-                      style={{ color: 'var(--accent-purple)', textDecoration: 'none', fontWeight: 600 }}>
-                      {task.key_prefix}-{task.parent_task_number}: {task.parent_title}
-                    </Link>
-                  ) : (
-                    <select
-                      value={task.parent_id ?? ''}
-                      onChange={e => patchTask({ parentId: e.target.value || null })}
-                      style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}
-                    >
-                      <option value="">Set parent…</option>
-                      {allTasks.filter(t => t.task_type !== 'subtask').map(t => (
-                        <option key={t.id} value={t.id}>{t.key_prefix}-{t.task_number}: {t.title.slice(0, 32)}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              </div>
-            )}
+            ))}
           </div>
 
-          {/* ── Description ── */}
-          <div className="task-section">
-            <div className="task-section-label">Description</div>
-            {descEditing ? (
-              <>
-                <textarea
-                  className="task-desc-editor"
-                  value={desc}
-                  onChange={e => setDesc(e.target.value)}
-                  autoFocus
-                  placeholder="Add a description…"
-                />
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <button className="btn btn-primary btn-sm" onClick={handleDescSave}>Save</button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => { setDescEditing(false); setDesc(task.description || ''); }}>
-                    Cancel
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div
-                onClick={() => setDescEditing(true)}
-                style={{
-                  background: 'var(--bg-card)', border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-md)', padding: '12px 14px',
-                  minHeight: 80, cursor: 'text', fontSize: 14, lineHeight: 1.7,
-                  color: desc ? 'var(--text-primary)' : 'var(--text-muted)',
-                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                  transition: 'border-color 0.2s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--border-hover)'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
-              >
-                {desc || 'No description — click to add one…'}
-              </div>
-            )}
-          </div>
+          {/* ── Linked Issues ── */}
+          {task.links?.length > 0 && (
+            <div className="td-section">
+              <h3 className="td-section-title">Linked Issues <span className="td-count">{task.links.length}</span></h3>
+              <div className="td-subtask-list">
+                {task.links.map(l => {
+                  const sm = TYPE_META[l.other_task_type] || TYPE_META.task;
+                  const sc = COLUMNS.find(c => c.id === l.other_task_status);
+                  
+                  let relationText = l.link_type.replace(/_/g, ' ');
+                  if (!l.isSource && l.link_type === 'blocks') relationText = 'is blocked by';
+                  else if (!l.isSource && l.link_type === 'is_blocked_by') relationText = 'blocks';
 
-          {/* ── Sub-Tasks ── */}
-          {task.task_type !== 'subtask' && (
-            <div className="task-section">
-              <div className="task-section-label">
-                Sub-Tasks
-                <span style={{ background: 'var(--bg-elevated)', borderRadius: 4, padding: '1px 7px', fontSize: 11, marginLeft: 8, color: 'var(--text-muted)' }}>
-                  {task.subtasks?.length || 0}
-                </span>
-              </div>
-              <div className="subtask-list">
-                {(task.subtasks || []).map(st => (
-                  <div key={st.id} className="subtask-item" onClick={() => navigate(`/projects/${projectId}/tasks/${st.id}`)}>
-                    <span>🔧</span>
-                    <span className="subtask-id">{st.key_prefix}-{st.task_number}</span>
-                    <span className="subtask-title">{st.title}</span>
-                    {st.assignee_name && (
-                      <div className="user-avatar" style={{ background: st.assignee_color, width: 20, height: 20, fontSize: 9, flexShrink: 0 }}>
-                        {initials(st.assignee_name)}
-                      </div>
-                    )}
-                    <span className="subtask-status" style={{ background: STATUS_COLORS[st.status]?.bg, color: STATUS_COLORS[st.status]?.text }}>
-                      {COLUMNS.find(c => c.id === st.status)?.label || st.status}
-                    </span>
-                  </div>
-                ))}
-                {!(task.subtasks?.length) && (
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)', padding: '4px 0' }}>No sub-tasks. Create one by selecting Sub-Task type.</p>
-                )}
+                  return (
+                    <div key={l.id} className="td-subtask-item" style={{ position: 'relative' }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginRight: 10, minWidth: 60, textTransform: 'uppercase' }}>
+                        {relationText}
+                      </span>
+                      <span className="td-subtask-type" style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${projectId}/tasks/${l.other_task_key}`)}>{sm.icon}</span>
+                      <span className="task-id" style={{ color: 'var(--accent-purple)', cursor: 'pointer' }} onClick={() => navigate(`/projects/${projectId}/tasks/${l.other_task_key}`)}>{l.other_task_key}</span>
+                      <span className="td-subtask-title" style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${projectId}/tasks/${l.other_task_key}`)}>{l.other_task_title}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 4 }}>
+                        {sc?.label || l.other_task_status}
+                      </span>
+                      <button className="btn btn-ghost btn-xs" style={{ marginLeft: 6, padding: '2px 6px' }} onClick={() => deleteLink(l.id)}>
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* ── Attachments ── */}
-          <div className="task-section">
-            <div className="task-section-label">
-              Attachments
-              <span style={{ background: 'var(--bg-elevated)', borderRadius: 4, padding: '1px 7px', fontSize: 11, marginLeft: 8, color: 'var(--text-muted)' }}>
-                {task.attachments?.length || 0}
-              </span>
-            </div>
-            <div className="attachment-list">
-              {(task.attachments || []).map(att => (
-                <div key={att.id} className="attachment-item">
-                  <div className="attachment-icon">{fileIcon(att.mimetype)}</div>
-                  <div className="attachment-info">
-                    <a
-                      className="attachment-name"
-                      href={`/uploads/${att.filename}`}
-                      target="_blank" rel="noopener noreferrer"
-                    >
-                      {att.original_name}
-                    </a>
-                    <div className="attachment-meta">
-                      {formatBytes(att.size)} · Uploaded by <strong>{att.user_name}</strong> · {formatDate(att.created_at)}
-                    </div>
-                  </div>
-                  <a
-                    href={`/uploads/${att.filename}`}
-                    download={att.original_name}
-                    className="btn btn-ghost btn-icon btn-sm"
-                    data-tip="Download"
-                  >
-                    ⬇
-                  </a>
-                  <button
-                    className="btn btn-ghost btn-icon btn-sm"
-                    onClick={() => deleteAttachment(att.id)}
-                    data-tip="Delete"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6l-1 14H6L5 6"/></svg>
-                  </button>
+          {/* ── Description ── */}
+          <div className="td-section">
+            <h3 className="td-section-title">Description</h3>
+            {editingDesc ? (
+              <div>
+                <CommentEditor
+                  value={descDraft}
+                  onChange={setDescDraft}
+                  onAttach={handleAttach}
+                  placeholder="Add a description…"
+                  rows={6}
+                  autoFocus
+                />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button className="btn btn-primary btn-sm" onClick={saveDesc}>Save</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setEditingDesc(false)}>Cancel</button>
                 </div>
-              ))}
-            </div>
-            <div
-              className={`drop-zone ${dragActive ? 'drag-active' : ''}`}
-              onClick={() => fileInputRef.current?.click()}
-              onDrop={handleDrop}
-              onDragOver={e => { e.preventDefault(); setDragActive(true); }}
-              onDragLeave={() => setDragActive(false)}
-            >
-              {uploading ? '⏳ Uploading…' : '📎 Click or drag & drop files here (max 20 MB)'}
-            </div>
-            <input
-              ref={fileInputRef} type="file" style={{ display: 'none' }}
-              onChange={e => { if (e.target.files[0]) uploadFile(e.target.files[0]); e.target.value = ''; }}
-            />
+              </div>
+            ) : (
+              <div
+                className="td-desc-content"
+                onClick={() => canEdit && (setDescDraft(task.description || ''), setEditingDesc(true))}
+                style={{ cursor: canEdit ? 'text' : 'default', padding: '12px 16px', borderRadius: '8px', border: '1px solid transparent', transition: 'border-color var(--transition)' }}
+                onMouseEnter={e => canEdit && (e.currentTarget.style.borderColor = 'var(--border)')}
+                onMouseLeave={e => canEdit && (e.currentTarget.style.borderColor = 'transparent')}
+              >
+                {task.description
+                  ? <div className="markdown-body"><ReactMarkdown>{String(task.description || '')}</ReactMarkdown></div>
+                  : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No description. Click to add one.</span>}
+              </div>
+            )}
           </div>
+
+          {/* ── Attachments ── */}
+          <div className="td-section">
+            <h3 className="td-section-title">
+              Attachments
+              {task.attachments?.length > 0 && <span className="td-count">{task.attachments.length}</span>}
+            </h3>
+            <DropZone onAttach={handleAttach} />
+            {task.attachments?.length > 0 && (
+              <div className="td-attach-list" style={{ marginTop: 10 }}>
+                {task.attachments.map(a => (
+                  <div key={a.id} className="td-attach-item">
+                    <span className="td-attach-icon">
+                      {/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(a.original_name) ? '🖼' : '📄'}
+                    </span>
+                    <div className="td-attach-info">
+                      <a href={`/uploads/${a.filename}`} target="_blank" rel="noreferrer" className="td-attach-name">
+                        {a.original_name}
+                      </a>
+                      <div className="td-attach-meta">
+                        {(a.size / 1024).toFixed(1)} KB · {a.user_name} · {fmtDate(a.created_at)}
+                      </div>
+                    </div>
+                    {(isAdmin || a.user_id === user?.id) && (
+                      <button className="btn btn-ghost btn-icon" onClick={() => deleteAttachment(a.id)} title="Remove">✕</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Subtasks ── */}
+          {task.subtasks?.length > 0 && (
+            <div className="td-section">
+              <h3 className="td-section-title">
+                Subtasks <span className="td-count">{task.subtasks.length}</span>
+              </h3>
+              <div className="td-subtask-list">
+                {task.subtasks.map(s => {
+                  const sm = TYPE_META[s.task_type] || TYPE_META.task;
+                  const sc = COLUMNS.find(c => c.id === s.status);
+                  return (
+                    <div key={s.id} className="td-subtask-item"
+                      onClick={() => navigate(`/projects/${projectId}/tasks/${s.key_prefix}-${s.task_number}`)}>
+                      <span className="td-subtask-type">{sm.icon}</span>
+                      <span className="task-id" style={{ color: 'var(--accent-purple)' }}>{s.key_prefix}-{s.task_number}</span>
+                      <span className="td-subtask-title">{s.title}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600,
+                        color: 'var(--text-muted)', background: 'var(--bg-elevated)',
+                        padding: '2px 8px', borderRadius: 4 }}>
+                        {sc?.label || s.status}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* ── Activity / Comments ── */}
-          <div className="task-section">
-            <div className="task-section-label">
-              Activity
-              <span style={{ background: 'var(--bg-elevated)', borderRadius: 4, padding: '1px 7px', fontSize: 11, marginLeft: 8, color: 'var(--text-muted)' }}>
-                {task.comments?.length || 0}
-              </span>
-            </div>
-
-            <div className="comment-list" style={{ marginBottom: 20 }}>
-              {(task.comments || []).length === 0 && (
-                <p style={{ fontSize: 13, color: 'var(--text-muted)', padding: '4px 0' }}>No comments yet. Be the first to comment!</p>
-              )}
+          <div className="td-section">
+            <h3 className="td-section-title">
+              Activity <span className="td-count">{task.comments?.length || 0}</span>
+            </h3>
+            <div className="td-comments">
               {(task.comments || []).map(c => (
-                <CommentItem
-                  key={c.id} comment={c} currentUser={user} isAdmin={isAdmin}
-                  onDelete={deleteComment} onEdit={editComment}
-                />
-              ))}
-            </div>
-
-            {/* New comment composer */}
-            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-              <div className="user-avatar" style={{ background: user?.avatar_color || '#7c3aed', width: 32, height: 32, fontSize: 12, flexShrink: 0 }}>
-                {initials(user?.name)}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div className="comment-editor-wrap">
-                  <textarea
-                    ref={commentRef}
-                    placeholder="Add a comment… (Ctrl+Enter to save)"
-                    value={newComment}
-                    onChange={e => setNewComment(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) postComment(); }}
-                    rows={2}
-                  />
-                  {newComment.trim() && (
-                    <div className="comment-editor-toolbar">
-                      <button className="btn btn-secondary btn-sm" onClick={() => setNewComment('')}>Cancel</button>
-                      <button className="btn btn-primary btn-sm" onClick={postComment} disabled={postingComment}>
-                        {postingComment ? 'Posting…' : 'Save'}
-                      </button>
+                <div key={c.id} className="td-comment">
+                  <Avatar name={c.user_name} color={c.user_color} size={30} />
+                  <div className="td-comment-body">
+                    <div className="td-comment-header">
+                      <strong>{c.user_name}</strong>
+                      <span className="td-comment-ts">{fmtDate(c.created_at)}</span>
+                      {(c.user_id === user?.id || isAdmin) && (
+                        <div className="td-comment-actions">
+                          <button className="btn btn-ghost btn-xs"
+                            onClick={() => { setEditingComment(c.id); setEditCommentText(c.content); }}>
+                            Edit
+                          </button>
+                          <button className="btn btn-ghost btn-xs" onClick={() => deleteComment(c.id)}>
+                            Delete
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  )}
+                    {editingComment === c.id ? (
+                      <div>
+                        <CommentEditor
+                          value={editCommentText}
+                          onChange={setEditCommentText}
+                          onAttach={handleAttach}
+                          rows={3}
+                          autoFocus
+                        />
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                          <button className="btn btn-primary btn-sm" onClick={() => saveComment(c.id)}>Save</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => setEditingComment(null)}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="td-comment-content markdown-body">
+                        <ReactMarkdown>{String(c.content || '')}</ReactMarkdown>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* New comment */}
+              <div className="td-new-comment">
+                <Avatar name={user?.name} color={user?.avatar_color} size={30} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <CommentEditor
+                    value={commentText}
+                    onChange={setCommentText}
+                    onAttach={(file, cb) => handleAttach(file, cb)}
+                    placeholder="Add a comment… (Markdown supported)"
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={addComment}
+                      disabled={!commentText.trim()}
+                    >
+                      Comment
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ═══════════ SIDEBAR ═══════════ */}
-        <div className="task-detail-sidebar">
+        {/* ── RIGHT SIDEBAR ── */}
+        <aside className="td-sidebar">
 
           {/* People */}
-          <div className="sidebar-section">
-            <div className="sidebar-section-title">👥 People</div>
+          <SideCard title="People" icon="👥">
+            <div className="td-side-row">
+              <span className="td-side-label">Assignee</span>
+              {canEdit ? (
+                <select className="td-side-select" value={task.assignee_id || ''}
+                  onChange={e => patch({ assigneeId: e.target.value || null })}>
+                  <option value="">Unassigned</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {task.assignee_name
+                    ? <><Avatar name={task.assignee_name} color={task.assignee_color} size={22} />
+                        <span style={{ fontSize: 12 }}>{task.assignee_name}</span></>
+                    : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Unassigned</span>}
+                </div>
+              )}
+            </div>
+            <div className="td-side-row" style={{ marginBottom: 0 }}>
+              <span className="td-side-label">Reporter</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Avatar name={task.creator_name} color={task.creator_color} size={22} />
+                <span style={{ fontSize: 12 }}>{task.creator_name || '—'}</span>
+              </div>
+            </div>
+          </SideCard>
 
-            <div className="sidebar-person-row">
-              <span className="sidebar-person-label">Assignee</span>
-              <div className="sidebar-person-value">
-                {task.assignee_name ? (
-                  <div className="user-avatar" style={{ background: task.assignee_color || '#7c3aed', width: 22, height: 22, fontSize: 9 }}>
-                    {initials(task.assignee_name)}
+          {/* Time Tracking */}
+          <SideCard title="Time Tracking" icon="⏱">
+            {/* Hours bar */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Hours logged</span>
+                <span style={{ fontWeight: 700, color: hoursLogged > 0 ? (hoursLogged > hoursEst && hoursEst > 0 ? '#ef4444' : 'var(--accent-cyan)') : 'var(--text-muted)' }}>
+                  {fmtHours(hoursLogged)}
+                  {hoursEst > 0 && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> / {fmtHours(hoursEst)}</span>}
+                </span>
+              </div>
+              
+              <div style={{ 
+                height: 10, 
+                borderRadius: 5, 
+                background: 'var(--bg-elevated)', 
+                overflow: 'hidden', 
+                display: 'flex',
+                boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.3)',
+                border: hoursLogged > hoursEst && hoursEst > 0 ? '1px solid rgba(239,68,68,0.3)' : '1px solid transparent'
+              }}>
+                {task.hourLogs?.length > 0 ? (
+                  [...task.hourLogs].reverse().map((l, i) => {
+                    const segmentWidth = hoursEst > 0 ? (l.hours / Math.max(hoursEst, hoursLogged)) * 100 : 0;
+                    const shades = ['#22d3ee', '#06b6d4', '#0891b2', '#0e7490', '#67e8f9'];
+                    const color = hoursLogged > hoursEst && hoursEst > 0 ? `rgba(239,68,68, ${0.4 + (i % 5)*0.1})` : shades[i % shades.length];
+                    
+                    return (
+                      <div 
+                        key={l.id} 
+                        style={{ 
+                          width: `${segmentWidth}%`, 
+                          height: '100%', 
+                          background: color,
+                          transition: 'width 0.4s ease',
+                          cursor: 'default'
+                        }}
+                        title={`${new Date(l.logged_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}: ${fmtHours(l.hours)}${l.note ? ` (${l.note})` : ''}`}
+                      />
+                    );
+                  })
+                ) : null}
+              </div>
+              {hoursLogged > hoursEst && hoursEst > 0 && (
+                <div style={{ fontSize: 10, color: '#ef4444', marginTop: 4, fontWeight: 600 }}>
+                   ⚠️ Over estimate by {fmtHours(hoursLogged - hoursEst)}
+                </div>
+              )}
+            </div>
+
+            {/* Est hours — assignee or admin */}
+            <div className="td-side-row">
+              <span className="td-side-label">Est. hours</span>
+              {(isAssignee || isAdmin) ? (
+                <input type="number" min="0" step="0.5" className="td-side-input"
+                  placeholder="0"
+                  defaultValue={hoursEst || ''}
+                  onBlur={e => patch({ hours_estimated: parseFloat(e.target.value) || 0 })} />
+              ) : (
+                <span style={{ fontSize: 12 }}>{hoursEst ? fmtHours(hoursEst) : '—'}</span>
+              )}
+            </div>
+
+            {/* Log Hours — ONLY assignee */}
+            {isAssignee && (
+              <button className="btn btn-secondary btn-sm"
+                style={{ width: '100%', marginTop: 4, marginBottom: 12 }}
+                onClick={() => setShowLogHours(true)}>
+                + Log Hours
+              </button>
+            )}
+
+            {/* Estimated completion */}
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                Est. Completion
+              </div>
+              {(isAssignee || isAdmin) ? (
+                editingEst ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input type="date" className="td-side-input" style={{ flex: 1 }}
+                        value={estDate} onChange={e => setEstDate(e.target.value)} />
+                      <input type="time" className="td-side-input" style={{ flex: 1 }}
+                        value={estTime} onChange={e => setEstTime(e.target.value)} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={saveEstimated}>Save</button>
+                      <button className="btn btn-ghost btn-sm"   style={{ flex: 1 }} onClick={() => setEditingEst(false)}>Cancel</button>
+                    </div>
                   </div>
                 ) : (
-                  <span style={{ color: 'var(--text-muted)', fontSize: 18 }}>○</span>
-                )}
-                <select
-                  className="sidebar-person-select"
-                  value={task.assignee_id ?? ''}
-                  onChange={e => patchTask({ assigneeId: e.target.value || null })}
-                >
-                  <option value="">Unassigned</option>
-                  {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
-              </div>
+                  <div className="td-est-pill" onClick={() => setEditingEst(true)}
+                    title="Click to set estimated completion">
+                    {estDisplay || '+ Set completion date'}
+                  </div>
+                )
+              ) : (
+                <div style={{ fontSize: 12, color: estDisplay ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                  {estDisplay || '—'}
+                </div>
+              )}
             </div>
 
-            <div className="sidebar-person-row">
-              <span className="sidebar-person-label">Reporter</span>
-              <div className="sidebar-person-value">
-                {task.creator_name ? (
-                  <>
-                    <div className="user-avatar" style={{ background: task.creator_color || '#7c3aed', width: 22, height: 22, fontSize: 9 }}>
-                      {initials(task.creator_name)}
-                    </div>
-                    <span style={{ fontSize: 13 }}>{task.creator_name}</span>
-                  </>
-                ) : (
-                  <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Unknown</span>
-                )}
-              </div>
-            </div>
-          </div>
+            {/* Logs list removed as per user request */}
+          </SideCard>
 
           {/* Dates */}
-          <div className="sidebar-section">
-            <div className="sidebar-section-title">📅 Dates</div>
-            <div className="sidebar-date-row">
-              <span className="sidebar-date-label">Created</span>
-              <span className="sidebar-date-value">{formatDate(task.created_at)}</span>
+          <SideCard title="Dates" icon="📅">
+            <div className="td-side-row">
+              <span className="td-side-label">Created</span>
+              <span style={{ fontSize: 12 }}>{fmtDate(task.created_at)}</span>
             </div>
-            <div className="sidebar-date-row">
-              <span className="sidebar-date-label">Updated</span>
-              <span className="sidebar-date-value">{formatDate(task.updated_at)}</span>
+            <div className="td-side-row" style={{ marginBottom: 0 }}>
+              <span className="td-side-label">Updated</span>
+              <span style={{ fontSize: 12 }}>{fmtDate(task.updated_at)}</span>
             </div>
-          </div>
+          </SideCard>
 
-          {/* Issue info */}
-          <div className="sidebar-section">
-            <div className="sidebar-section-title">🔖 Issue</div>
-            <div className="sidebar-date-row">
-              <span className="sidebar-date-label">ID</span>
-              <span className="task-id" style={{ fontSize: 13, color: 'var(--accent-purple)' }}>
-                {task.key_prefix}-{task.task_number}
-              </span>
+          {/* Issue Info */}
+          <SideCard title="Issue Info" icon="🔖">
+            <div className="td-side-row">
+              <span className="td-side-label">Issue ID</span>
+              <span className="task-id" style={{ color: 'var(--accent-purple)' }}>{task.key_prefix}-{task.task_number}</span>
             </div>
-            <div className="sidebar-date-row">
-              <span className="sidebar-date-label">Project</span>
-              <span className="sidebar-date-value">{project?.name}</span>
+            <div className="td-side-row">
+              <span className="td-side-label">Priority</span>
+              <span className={`priority-badge priority-${task.priority}`}>{task.priority}</span>
             </div>
-          </div>
-
-          {/* Quick status change */}
-          <div className="sidebar-section">
-            <div className="sidebar-section-title">🔄 Status</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {COLUMNS.map(col => (
-                <button
-                  key={col.id}
-                  onClick={() => patchTask({ status: col.id })}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '7px 10px', borderRadius: 'var(--radius-sm)',
-                    background: task.status === col.id ? STATUS_COLORS[col.id]?.bg : 'transparent',
-                    border: `1px solid ${task.status === col.id ? col.color + '40' : 'transparent'}`,
-                    color: task.status === col.id ? STATUS_COLORS[col.id]?.text : 'var(--text-muted)',
-                    cursor: 'pointer', fontSize: 12, fontWeight: task.status === col.id ? 700 : 400,
-                    fontFamily: 'var(--font)', textAlign: 'left',
-                    transition: 'all 0.15s ease',
-                  }}
-                  onMouseEnter={e => { if (task.status !== col.id) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
-                  onMouseLeave={e => { if (task.status !== col.id) e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: col.color, flexShrink: 0 }} />
-                  {col.label}
-                  {task.status === col.id && <span style={{ marginLeft: 'auto', fontSize: 10 }}>✓</span>}
-                </button>
-              ))}
+            <div className="td-side-row">
+              <span className="td-side-label">Type</span>
+              <span className={`type-badge type-${task.task_type}`}>{tm.icon} {tm.label}</span>
             </div>
-          </div>
-
-        </div>
+            {task.parent_id && (
+              <div className="td-side-row" style={{ marginBottom: 0 }}>
+                <span className="td-side-label">Parent</span>
+                <span
+                  style={{ fontSize: 12, color: 'var(--accent-purple)', cursor: 'pointer', textDecoration: 'underline dotted' }}
+                  onClick={() => navigate(`/projects/${projectId}/tasks/${task.parent_key_prefix}-${task.parent_task_number}`)}>
+                  {task.parent_key_prefix}-{task.parent_task_number}
+                </span>
+              </div>
+            )}
+          </SideCard>
+        </aside>
       </div>
+
+      {showLogHours && (
+        <LogHoursModal taskId={task.id} onLogged={onNewHourLog} onClose={() => setShowLogHours(false)} />
+      )}
+      {showLinkModal && (
+        <LinkTaskModal sourceTaskId={task.id} onLinked={onNewLink} onClose={() => setShowLinkModal(false)} />
+      )}
     </div>
   );
 }

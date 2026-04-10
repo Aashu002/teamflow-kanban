@@ -131,15 +131,23 @@ export default function AdminPage() {
   const [tab, setTab] = useState('users');
   const [users, setUsers] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddUser, setShowAddUser] = useState(false);
   const [showAddProject, setShowAddProject] = useState(false);
 
   useEffect(() => {
-    Promise.all([api.get('/users'), api.get('/projects')])
-      .then(([u, p]) => { setUsers(u.data); setProjects(p.data); })
+    Promise.all([api.get('/users'), api.get('/projects'), api.get('/projects/requests/pending')])
+      .then(([u, p, r]) => { setUsers(u.data); setProjects(p.data); setRequests(r.data); })
       .finally(() => setLoading(false));
   }, []);
+
+  const handleRequestAction = async (id, action) => {
+    try {
+      await api.put(`/projects/requests/${id}/${action}`);
+      setRequests(prev => prev.filter(req => req.id !== id));
+    } catch (err) {}
+  };
 
   const handleDeleteUser = async id => {
     if (!confirm('Remove this user?')) return;
@@ -172,6 +180,9 @@ export default function AdminPage() {
           </button>
           <button className={`admin-tab ${tab === 'projects' ? 'active' : ''}`} onClick={() => setTab('projects')}>
             📁 Projects
+          </button>
+          <button className={`admin-tab ${tab === 'requests' ? 'active' : ''}`} onClick={() => setTab('requests')}>
+            📥 Join Requests
           </button>
         </div>
 
@@ -263,6 +274,53 @@ export default function AdminPage() {
                           </button>
                           <button id={`delete-project-${p.id}`} className="btn btn-danger btn-sm" onClick={() => handleDeleteProject(p.id)}>
                             Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+        {tab === 'requests' && (
+          <>
+            <div className="admin-section-header">
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{requests.length} Pending Requests</div>
+            </div>
+            {loading ? <div className="loading-spinner" style={{ margin: '40px auto' }} /> : (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Email</th>
+                    <th>Project</th>
+                    <th>Requested On</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {requests.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
+                        No pending requests.
+                      </td>
+                    </tr>
+                  )}
+                  {requests.map(r => (
+                    <tr key={r.id}>
+                      <td style={{ fontWeight: 500 }}>{r.user_name}</td>
+                      <td style={{ color: 'var(--text-secondary)' }}>{r.user_email}</td>
+                      <td><span className="type-badge type-story">{r.project_name}</span></td>
+                      <td style={{ color: 'var(--text-muted)' }}>{new Date(r.created_at).toLocaleDateString()}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button className="btn btn-primary btn-sm" onClick={() => handleRequestAction(r.id, 'approve')}>
+                            Approve
+                          </button>
+                          <button className="btn btn-danger btn-sm" onClick={() => handleRequestAction(r.id, 'reject')}>
+                            Reject
                           </button>
                         </div>
                       </td>

@@ -1,0 +1,183 @@
+import React, { useEffect, useState } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import Navbar from '../components/Navbar.jsx';
+import api from '../api.js';
+import { TYPE_META } from '../components/TaskCard.jsx';
+import { COLUMNS } from './BoardPage.jsx';
+
+export default function IssuesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const tab = searchParams.get('tab') || 'search';
+  
+  const [tasks, setTasks] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const [filterType, setFilterType] = useState('all');
+  const [filterPriority, setFilterPriority] = useState('all');
+  const [filterAssignee, setFilterAssignee] = useState('all');
+
+  const loadIssues = () => {
+    setLoading(true);
+    const params = {};
+    if (tab === 'created') params.creator = 'me';
+    if (searchQuery.trim() && tab === 'search') params.search = searchQuery.trim();
+    if (tab === 'search' && filterType !== 'all') params.type = filterType;
+    if (tab === 'search' && filterPriority !== 'all') params.priority = filterPriority;
+    if (tab === 'search' && filterAssignee !== 'all') params.assignee = filterAssignee;
+
+    api.get('/tasks/search', { params }).then(res => {
+      setTasks(res.data);
+    }).finally(() => setLoading(false));
+    
+    // Also fetch users if not loaded
+    if (users.length === 0) {
+      api.get('/users').then(res => setUsers(res.data)).catch(() => {});
+    }
+  };
+
+  useEffect(() => {
+    loadIssues();
+    // eslint-disable-next-line
+  }, [tab]);
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    if (tab !== 'search') setSearchParams({ tab: 'search' });
+    loadIssues();
+  };
+
+  return (
+    <div className="admin-page">
+      <Navbar />
+      <div className="admin-container" style={{ maxWidth: 1000 }}>
+        <div className="admin-section-header" style={{ marginBottom: 12 }}>
+          <div>
+            <div className="admin-section-title">
+              {tab === 'created' ? 'Issues Created By Me' : 'Search Issues'}
+            </div>
+            <div className="admin-section-sub">
+              {tab === 'created' ? 'View and manage tickets you have created.' : 'Search across all projects you have access to.'}
+            </div>
+          </div>
+        </div>
+
+        <div className="admin-tabs">
+          <button className={`admin-tab ${tab === 'created' ? 'active' : ''}`} onClick={() => setSearchParams({ tab: 'created' })}>
+            🙋‍♂️ Created By Me
+          </button>
+          <button className={`admin-tab ${tab === 'search' ? 'active' : ''}`} onClick={() => setSearchParams({ tab: 'search' })}>
+            🔍 Search
+          </button>
+        </div>
+
+        {tab === 'search' && (
+          <form onSubmit={handleSearchSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12, margin: '20px 0' }}>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <input 
+                type="text" 
+                className="form-input" 
+                style={{ flex: 1 }}
+                placeholder="Search by title, description, or issue key..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+              <button className="btn btn-primary" type="submit">Search</button>
+            </div>
+            <div style={{ display: 'flex', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="text-muted" style={{ fontSize: 13, fontWeight: 500 }}>Type:</span>
+                <select className="form-select" style={{ width: 140, padding: '4px 8px', fontSize: 13 }} value={filterType} onChange={e => setFilterType(e.target.value)}>
+                  <option value="all">All</option>
+                  <option value="epic">⚡ Epic</option>
+                  <option value="story">📖 Story</option>
+                  <option value="task">✅ Task</option>
+                  <option value="subtask">🔧 Sub-Task</option>
+                  <option value="bug">🐛 Bug</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="text-muted" style={{ fontSize: 13, fontWeight: 500 }}>Priority:</span>
+                <select className="form-select" style={{ width: 120, padding: '4px 8px', fontSize: 13 }} value={filterPriority} onChange={e => setFilterPriority(e.target.value)}>
+                  <option value="all">All</option>
+                  <option value="high">🔴 High</option>
+                  <option value="medium">🟡 Medium</option>
+                  <option value="low">🟢 Low</option>
+                </select>
+              </div>
+              {users.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="text-muted" style={{ fontSize: 13, fontWeight: 500 }}>Assignee:</span>
+                  <select className="form-select" style={{ width: 160, padding: '4px 8px', fontSize: 13 }} value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}>
+                    <option value="all">All</option>
+                    {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+          </form>
+        )}
+
+        {loading ? <div className="loading-spinner" style={{ margin: '40px auto' }} /> : (
+          <table className="data-table" style={{ tableLayout: 'fixed', marginTop: 20 }}>
+            <colgroup>
+              <col style={{ width: 100 }}/>
+              <col style={{ width: 140 }}/>
+              <col/>
+              <col style={{ width: 140 }}/>
+              <col style={{ width: 120 }}/>
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Project</th>
+                <th>Title & Type</th>
+                <th>Assignee</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tasks.length === 0 && (
+                <tr>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
+                    No issues found matching your criteria.
+                  </td>
+                </tr>
+              )}
+              {tasks.map(t => {
+                const tm = TYPE_META[t.task_type] || TYPE_META.task;
+                const col = COLUMNS.find(c => c.id === t.status);
+                return (
+                  <tr key={t.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)}>
+                    <td>
+                      <span className="task-id" style={{ color: 'var(--accent-purple)' }}>{t.key_prefix}-{t.task_number}</span>
+                    </td>
+                    <td style={{ color: 'var(--text-secondary)', fontSize: 13, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                      {t.project_name}
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {t.title}
+                        <span className={`type-badge type-${t.task_type}`} style={{ fontSize: 10, padding: '2px 6px' }}>{tm.icon} {tm.label}</span>
+                      </div>
+                    </td>
+                    <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                      {t.assignee_name || 'Unassigned'}
+                    </td>
+                    <td>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: col?.color || 'var(--text-muted)', background: (col?.color || '#475569') + '20', padding: '2px 8px', borderRadius: 4 }}>
+                        {col?.label || t.status}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}

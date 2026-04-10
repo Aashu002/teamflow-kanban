@@ -25,7 +25,7 @@ export default function TaskCard({ task, dragging }) {
     // Don't navigate if we're in the middle of a drag
     if (isDragging) return;
     e.stopPropagation();
-    navigate(`/projects/${task.project_id}/tasks/${task.id}`);
+    navigate(`/projects/${task.project_id}/tasks/${task.key_prefix}-${task.task_number}`);
   };
 
   return (

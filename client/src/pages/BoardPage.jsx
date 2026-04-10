@@ -5,22 +5,25 @@ import {
 } from '@dnd-kit/core';
 import Navbar from '../components/Navbar.jsx';
 import KanbanColumn from '../components/KanbanColumn.jsx';
-import TaskCard from '../components/TaskCard.jsx';
+import TaskCard, { TYPE_META } from '../components/TaskCard.jsx';
 import CreateTaskModal from '../components/CreateTaskModal.jsx';
+import { useAuth } from '../contexts/AuthContext.jsx';
 import api from '../api.js';
+import { socket } from '../socket.js';
 
 export const COLUMNS = [
   { id: 'open',         label: 'Open',                  color: '#3b82f6' },
   { id: 'gathering',    label: 'Gathering Requirements', color: '#8b5cf6' },
   { id: 'inprogress',   label: 'In Progress',            color: '#f59e0b' },
-  { id: 'review',       label: 'In Review',              color: '#06b6d4' },
+
   { id: 'qa_testing',   label: 'QA Testing',             color: '#ec4899' },
   { id: 'qa_completed', label: 'QA Completed',           color: '#22c55e' },
   { id: 'stakeholder',  label: 'Stakeholder Review',     color: '#f97316' },
-  { id: 'done',         label: 'Live / Done',            color: '#64748b' },
+  { id: 'done',         label: 'Live / Done',            color: '#15803d' },
 ];
 
 export default function BoardPage() {
+  const { user, isAdmin } = useAuth();
   const { projectId } = useParams();
   const navigate = useNavigate();
   const [project, setProject] = useState(null);
@@ -29,19 +32,12 @@ export default function BoardPage() {
   const [loading, setLoading] = useState(true);
   const [activeTask, setActiveTask] = useState(null);
   const [createInColumn, setCreateInColumn] = useState(null);
+  const [viewMode, setViewMode] = useState('board');
   const [filterPriority, setFilterPriority] = useState('all');
   const [filterAssignee, setFilterAssignee] = useState('all');
   const [filterType, setFilterType] = useState('all');
-  const pollingRef = useRef(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-
-  const loadTasks = useCallback(async () => {
-    try {
-      const { data } = await api.get(`/tasks?projectId=${projectId}`);
-      setTasks(data);
-    } catch {}
-  }, [projectId]);
 
   useEffect(() => {
     const init = async () => {
@@ -57,9 +53,35 @@ export default function BoardPage() {
       finally { setLoading(false); }
     };
     init();
-    pollingRef.current = setInterval(loadTasks, 5000);
-    return () => clearInterval(pollingRef.current);
-  }, [projectId, loadTasks, navigate]);
+
+    socket.emit('join_project', projectId);
+
+    const onTaskCreated = (newTask) => {
+      setTasks(prev => {
+        if (prev.some(t => t.id === newTask.id)) return prev;
+        return [newTask, ...prev];
+      });
+    };
+
+    const onTaskUpdated = (updatedTask) => {
+      setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+    };
+
+    const onTaskDeleted = ({ id }) => {
+      setTasks(prev => prev.filter(t => t.id !== id));
+    };
+
+    socket.on('task_created', onTaskCreated);
+    socket.on('task_updated', onTaskUpdated);
+    socket.on('task_deleted', onTaskDeleted);
+
+    return () => {
+      socket.emit('leave_project', projectId);
+      socket.off('task_created', onTaskCreated);
+      socket.off('task_updated', onTaskUpdated);
+      socket.off('task_deleted', onTaskDeleted);
+    };
+  }, [projectId, navigate]);
 
   const filteredTasks = tasks.filter(t => {
     if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
@@ -68,7 +90,10 @@ export default function BoardPage() {
     return true;
   });
 
-  const tasksByCol = col => filteredTasks.filter(t => t.status === col);
+  const boardTasks = filteredTasks.filter(t => t.status !== 'backlog');
+  const backlogTasks = filteredTasks.filter(t => t.status === 'backlog');
+
+  const tasksByCol = col => boardTasks.filter(t => t.status === col);
 
   const handleDragStart = ({ active }) => {
     setActiveTask(tasks.find(t => t.id === active.id) || null);
@@ -94,16 +119,32 @@ export default function BoardPage() {
     setCreateInColumn(null);
   };
 
+  const patchProject = async (updates) => {
+    try {
+      const { data } = await api.patch(`/projects/${projectId}`, updates);
+      setProject(data);
+    } catch (err) {
+      console.error('Failed to update project metadata', err);
+    }
+  };
+
   if (loading) return <div className="loading-screen"><div className="loading-spinner"/></div>;
+
+  const canEditProject = isAdmin || project?.owner_id === user?.id;
 
   return (
     <div className="board-page">
-      <Navbar projectName={project?.name} onBack={() => navigate('/projects')} />
+      <Navbar projectName={project?.name} onBack={() => navigate('/home')} />
 
       <div className="board-toolbar">
-        <span className="board-toolbar-title">Kanban Board</span>
-        <span className="board-task-count">{filteredTasks.length} issues</span>
+        <span className="board-toolbar-title">{viewMode === 'board' ? 'Kanban Board' : 'Project Backlog'}</span>
+        <span className="board-task-count">{viewMode === 'board' ? boardTasks.length : backlogTasks.length} issues</span>
         <div style={{ flex: 1 }} />
+        
+        <div className="admin-tabs" style={{ margin: '0 16px', background: 'var(--bg-secondary)', padding: 4, borderRadius: 8 }}>
+          <button className={`admin-tab ${viewMode === 'board' ? 'active' : ''}`} style={{ padding: '4px 12px', minWidth: 80 }} onClick={() => setViewMode('board')}>Board</button>
+          <button className={`admin-tab ${viewMode === 'backlog' ? 'active' : ''}`} style={{ padding: '4px 12px', minWidth: 80 }} onClick={() => setViewMode('backlog')}>Backlog ({tasks.filter(t => t.status === 'backlog').length})</button>
+        </div>
         <div className="board-filter-group">
           <span className="board-filter-label">Type:</span>
           <select id="filter-type" className="board-filter-select" value={filterType} onChange={e => setFilterType(e.target.value)}>
@@ -131,27 +172,128 @@ export default function BoardPage() {
             {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
         </div>
-        <button id="new-task-btn" className="btn btn-primary btn-sm" onClick={() => setCreateInColumn('open')}>
+        <button id="new-task-btn" className="btn btn-primary btn-sm" onClick={() => setCreateInColumn('backlog')}>
           + Create Issue
         </button>
       </div>
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="board-container">
-          {COLUMNS.map((col, i) => (
-            <KanbanColumn
-              key={col.id}
-              col={col}
-              tasks={tasksByCol(col.id)}
-              style={{ animationDelay: `${i * 40}ms` }}
-              onAddTask={() => setCreateInColumn(col.id)}
-            />
-          ))}
+      {project && (
+        <div className="board-meta-banner" style={{ display: 'flex', gap: 24, margin: '16px 20px 16px', padding: '12px 16px', background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Project Goal</div>
+            {canEditProject ? (
+              <input 
+                style={{ width: '100%', background: 'transparent', border: '1px dashed transparent', padding: '4px 8px', margin: '-4px -8px', borderRadius: 4, color: 'var(--text-primary)', fontSize: 14 }}
+                placeholder="Click to add a project goal/objective..."
+                defaultValue={project.project_goal || ''}
+                onBlur={(e) => {
+                  if (e.target.value !== project.project_goal) patchProject({ project_goal: e.target.value });
+                }}
+                onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+              />
+            ) : (
+              <div style={{ fontSize: 14, color: project.project_goal ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                {project.project_goal || 'No goal set.'}
+              </div>
+            )}
+          </div>
+          <div style={{ width: 200, borderLeft: '1px solid var(--border)', paddingLeft: 24 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Target Date</div>
+            {canEditProject ? (
+              <input 
+                type="date"
+                style={{ background: 'transparent', border: '1px dashed transparent', padding: '2px 8px', margin: '-2px -8px', borderRadius: 4, color: project.estimated_completion_date ? 'var(--accent-purple)' : 'var(--text-muted)', fontSize: 14, fontWeight: 500 }}
+                defaultValue={project.estimated_completion_date || ''}
+                onChange={(e) => patchProject({ estimated_completion_date: e.target.value })}
+              />
+            ) : (
+              <div style={{ fontSize: 14, fontWeight: 500, color: project.estimated_completion_date ? 'var(--accent-purple)' : 'var(--text-muted)' }}>
+                {project.estimated_completion_date ? new Date(project.estimated_completion_date).toLocaleDateString() : 'Unscheduled'}
+              </div>
+            )}
+          </div>
         </div>
-        <DragOverlay>
-          {activeTask && <TaskCard task={activeTask} dragging />}
-        </DragOverlay>
-      </DndContext>
+      )}
+
+      {viewMode === 'board' ? (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="board-container">
+            {COLUMNS.map((col, i) => (
+              <KanbanColumn
+                key={col.id}
+                col={col}
+                tasks={tasksByCol(col.id)}
+                style={{ animationDelay: `${i * 40}ms` }}
+                onAddTask={() => setCreateInColumn(col.id)}
+              />
+            ))}
+          </div>
+          <DragOverlay>
+            {activeTask && <TaskCard task={activeTask} dragging />}
+          </DragOverlay>
+        </DndContext>
+      ) : (
+        <div className="admin-container" style={{ margin: '20px auto', maxWidth: 1000, background: 'var(--bg-surface)', padding: 20, borderRadius: 12, border: '1px solid var(--border-color)' }}>
+          <h3 style={{ marginTop: 0, marginBottom: 20, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>Backlog</span>
+            <span style={{ fontSize: 12, padding: '2px 8px', background: 'var(--bg-secondary)', borderRadius: 12, color: 'var(--text-muted)' }}>{backlogTasks.length}</span>
+          </h3>
+          {backlogTasks.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+              No issues in the backlog.
+            </div>
+          ) : (
+            <table className="data-table" style={{ width: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 100 }}>Key</th>
+                  <th>Title & Type</th>
+                  <th style={{ width: 140 }}>Assignee</th>
+                  <th style={{ width: 100, textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {backlogTasks.map(t => {
+                  const tm = TYPE_META[t.task_type] || TYPE_META.task;
+                  return (
+                    <tr key={t.id} style={{ cursor: 'pointer' }} onDoubleClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)}>
+                      <td onClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)}>
+                        <span className="task-id" style={{ color: 'var(--accent-purple)' }}>{t.key_prefix}-{t.task_number}</span>
+                      </td>
+                      <td onClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)}>
+                        <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-primary)' }}>
+                          {t.title}
+                          <span className={`type-badge type-${t.task_type}`} style={{ fontSize: 10, padding: '2px 6px' }}>{tm.icon} {tm.label}</span>
+                        </div>
+                      </td>
+                      <td onClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                        {t.assignee_name || 'Unassigned'}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button 
+                          className="btn btn-sm btn-secondary" 
+                          style={{ padding: '4px 8px', fontSize: 11 }}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              await api.patch(`/tasks/${t.id}`, { status: 'open' });
+                              setTasks(prev => prev.map(pt => pt.id === t.id ? { ...pt, status: 'open' } : pt));
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          }}
+                        >
+                          → Move to Board
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {createInColumn && (
         <CreateTaskModal
