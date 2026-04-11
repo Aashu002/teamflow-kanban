@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import GlobalCreateTaskModal from './GlobalCreateTaskModal.jsx';
+import GlobalSearch from './GlobalSearch.jsx';
 import { socket } from '../socket.js';
 import { useNavbar } from '../contexts/NavbarContext.jsx';
 
@@ -45,6 +46,7 @@ export default function Navbar() {
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const userDropdownRef = useRef(null);
   const [showGlobalCreate, setShowGlobalCreate] = useState(false);
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [isConnected, setIsConnected] = useState(socket.connected);
 
   const handleLogout = () => { logout(); navigate('/login'); };
@@ -75,6 +77,17 @@ export default function Navbar() {
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowGlobalSearch(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   return (
@@ -133,7 +146,13 @@ export default function Navbar() {
 
         <div className="navbar-spacer" />
 
-        <div className="navbar-actions">
+        <div className="navbar-actions" style={{ gap: 16 }}>
+          <div className="navbar-search-trigger" onClick={() => setShowGlobalSearch(true)}>
+            <span className="search-trigger-icon">🔍</span>
+            <span className="search-trigger-text">Search...</span>
+            <span className="search-trigger-key">⌘K</span>
+          </div>
+
           <div className="user-dropdown-container" ref={userDropdownRef}>
             <div className="user-chip clickable-chip" onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)} title="Menu">
               {user?.avatar_url ? (
@@ -143,7 +162,7 @@ export default function Navbar() {
                   {initials(user?.name)}
                 </div>
               )}
-              <div>
+              <div className="user-chip-info">
                 <div className="user-chip-name">{user?.name}</div>
                 <div className="user-chip-role">{user?.role}</div>
               </div>
@@ -179,6 +198,10 @@ export default function Navbar() {
 
       {showGlobalCreate && (
         <GlobalCreateTaskModal onClose={() => setShowGlobalCreate(false)} />
+      )}
+
+      {showGlobalSearch && (
+        <GlobalSearch onClose={() => setShowGlobalSearch(false)} />
       )}
     </>
   );
