@@ -224,7 +224,7 @@ function AllTasksModal({ tasks = [], defaultPriority = 'all', onClose }) {
               {filtered.length} of {tasks.length} tickets
               {filter.priority !== 'all' && (
                 <span style={{ color: PRIORITY_CONFIG[filter.priority]?.text, marginLeft: 6 }}>
-                  · {filter.priority} priority
+                  · {filter.priority.toUpperCase()} PRIORITY
                 </span>
               )}
             </div>
@@ -267,7 +267,7 @@ function AllTasksModal({ tasks = [], defaultPriority = 'all', onClose }) {
               <col style={{ width: 90 }}/><col style={{ width: 90 }}/><col style={{ width: 140 }}/>
             </colgroup>
             <thead>
-              <tr><th>ID</th><th>Title</th><th>Project</th><th>Type</th><th>Priority</th><th>Status</th></tr>
+              <tr><th>ID</th><th>Title</th><th>Project</th><th style={{ textAlign: 'center' }}>Type</th><th style={{ textAlign: 'center' }}>Priority</th><th style={{ textAlign: 'center' }}>Status</th></tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
@@ -284,10 +284,30 @@ function AllTasksModal({ tasks = [], defaultPriority = 'all', onClose }) {
                     <td><span className="task-id" style={{ color: 'var(--accent-purple)' }}>{t.key_prefix}-{t.task_number}</span></td>
                     <td style={{ fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</td>
                     <td style={{ color: 'var(--text-secondary)', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.project_name}</td>
-                    <td><span className={`type-badge type-${t.task_type}`}>{tm.icon} {tm.label}</span></td>
-                    <td><span className={`priority-badge priority-${t.priority}`}>{pri?.icon} {t.priority}</span></td>
-                    <td>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_COLORS[t.status] || 'var(--text-muted)', background: (STATUS_COLORS[t.status] || '#475569') + '20', padding: '2px 8px', borderRadius: 4 }}>
+                    <td style={{ textAlign: 'center' }}>
+                      <span className={`type-badge type-${t.task_type}`} style={{ textTransform: 'uppercase', fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 4, whiteSpace: 'nowrap' }}>
+                        {tm.icon} {tm.label}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <span className={`priority-badge priority-${t.priority}`} style={{ justifyContent: 'center', whiteSpace: 'nowrap' }}>
+                        {pri?.icon} {t.priority}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <span style={{ 
+                        display: 'inline-block',
+                        minWidth: 90,
+                        fontSize: 10,
+                        lineHeight: 1.2,
+                        fontWeight: 700, 
+                        textAlign: 'center',
+                        color: STATUS_COLORS[t.status] || 'var(--text-muted)', 
+                        background: (STATUS_COLORS[t.status] || '#475569') + '20', 
+                        padding: '4px 8px', 
+                        borderRadius: 4,
+                        textTransform: 'uppercase'
+                      }}>
                         {col?.label || t.status}
                       </span>
                     </td>

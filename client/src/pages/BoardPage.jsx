@@ -179,9 +179,6 @@ export default function BoardPage() {
             {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
         </div>
-        <button id="new-task-btn" className="btn btn-primary btn-sm" onClick={() => setCreateInColumn('backlog')}>
-          + Create Issue
-        </button>
       </div>
 
       {project && (
