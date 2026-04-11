@@ -9,7 +9,7 @@
 
 ## ✨ Key Features
 
-### 🔍 Global Command Palette (Cmd + K)
+### 🔍 Global Command Palette 
 Navigate your workspace at the speed of thought. Trigger the search palette from anywhere to find tasks, projects, or team members instantly.
 
 ### 📋 Intelligent Kanban Board
