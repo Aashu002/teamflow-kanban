@@ -139,25 +139,27 @@ export default function IssuesPage() {
         {loading ? <div className="loading-spinner" style={{ margin: '40px auto' }} /> : (
           <table className="data-table" style={{ tableLayout: 'fixed', marginTop: 20 }}>
             <colgroup>
-              <col style={{ width: 100 }}/>
+              <col style={{ width: 90 }}/>
               <col style={{ width: 140 }}/>
+              <col style={{ width: 110 }}/>
               <col/>
               <col style={{ width: 140 }}/>
-              <col style={{ width: 120 }}/>
+              <col style={{ width: 130 }}/>
             </colgroup>
             <thead>
               <tr>
                 <th>Key</th>
                 <th>Project</th>
-                <th>Title & Type</th>
+                <th style={{ textAlign: 'center' }}>Type</th>
+                <th>Title</th>
                 <th>Assignee</th>
-                <th>Status</th>
+                <th style={{ textAlign: 'center' }}>Status</th>
               </tr>
             </thead>
             <tbody>
               {tasks.length === 0 && (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
                     No issues found matching your criteria.
                   </td>
                 </tr>
@@ -173,17 +175,31 @@ export default function IssuesPage() {
                     <td style={{ color: 'var(--text-secondary)', fontSize: 13, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                       {t.project_name}
                     </td>
-                    <td>
-                      <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {t.title}
-                        <span className={`type-badge type-${t.task_type}`} style={{ fontSize: 10, padding: '2px 6px' }}>{tm.icon} {tm.label}</span>
-                      </div>
+                    <td style={{ textAlign: 'center' }}>
+                      <span className={`type-badge type-${t.task_type}`} style={{ textTransform: 'uppercase', fontSize: 9, fontWeight: 700, padding: '4px 8px', borderRadius: 4, whiteSpace: 'nowrap' }}>
+                        {tm.icon} {tm.label}
+                      </span>
                     </td>
-                    <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    <td style={{ fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {t.title}
+                    </td>
+                    <td style={{ fontSize: 13, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {t.assignee_name || 'Unassigned'}
                     </td>
-                    <td>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: col?.color || 'var(--text-muted)', background: (col?.color || '#475569') + '20', padding: '2px 8px', borderRadius: 4 }}>
+                    <td style={{ textAlign: 'center' }}>
+                      <span style={{ 
+                        display: 'inline-block',
+                        minWidth: 100,
+                        fontSize: 10,
+                        lineHeight: 1.2,
+                        fontWeight: 700, 
+                        textAlign: 'center',
+                        color: col?.color || 'var(--text-muted)', 
+                        background: (col?.color || '#475569') + '20', 
+                        padding: '4px 8px', 
+                        borderRadius: 4,
+                        textTransform: 'uppercase'
+                      }}>
                         {col?.label || t.status}
                       </span>
                     </td>
