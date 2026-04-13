@@ -166,32 +166,43 @@ router.get('/:id', authMiddleware, (req, res) => {
 
 // PATCH /api/projects/:id
 router.patch('/:id', authMiddleware, (req, res) => {
-  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+  const projectId = Number(req.params.id);
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
   if (!project) return res.status(404).json({ error: 'Project not found' });
   
-  // Allow admins or the project owner to edit the project details
   if (req.user.role !== 'admin' && project.owner_id !== req.user.id) {
     return res.status(403).json({ error: 'Admin or Owner access required' });
   }
 
-  const { 
-    name = null, 
-    description = null, 
-    estimated_completion_date = null, 
-    project_goal = null 
-  } = req.body;
+  const { name, description, estimated_completion_date, project_goal, owner_id } = req.body;
   
-  db.prepare(`
-    UPDATE projects 
-    SET name = COALESCE(?, name), 
-        description = COALESCE(?, description),
-        estimated_completion_date = COALESCE(?, estimated_completion_date),
-        project_goal = COALESCE(?, project_goal)
-    WHERE id = ?
-  `).run(name, description, estimated_completion_date, project_goal, req.params.id);
+  const updates = [];
+  const params = [];
   
-  const updatedProject = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
-  // Optional: Emit socket event here if we were using it for project updates globally
+  if (name !== undefined) { updates.push('name = ?'); params.push(name); }
+  if (description !== undefined) { updates.push('description = ?'); params.push(description); }
+  if (estimated_completion_date !== undefined) { updates.push('estimated_completion_date = ?'); params.push(estimated_completion_date); }
+  if (project_goal !== undefined) { updates.push('project_goal = ?'); params.push(project_goal); }
+  
+  if (owner_id !== undefined) { 
+    updates.push('owner_id = ?'); 
+    params.push(owner_id === null ? null : Number(owner_id)); 
+  }
+  
+  if (updates.length > 0) {
+    params.push(projectId);
+    const sql = `UPDATE projects SET ${updates.join(', ')} WHERE id = ?`;
+    
+    const transaction = db.transaction(() => {
+      db.prepare(sql).run(...params);
+      if (owner_id !== undefined && owner_id !== null) {
+        db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)').run(projectId, Number(owner_id));
+      }
+    });
+    transaction();
+  }
+  
+  const updatedProject = db.prepare('SELECT p.*, u.name as owner_name FROM projects p LEFT JOIN users u ON u.id = p.owner_id WHERE p.id = ?').get(projectId);
   res.json(updatedProject);
 });
 
