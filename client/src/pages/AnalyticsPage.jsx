@@ -70,23 +70,64 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [chartFilter, setChartFilter] = useState(null);
   
+  // Filter States
+  const [projectId, setProjectId] = useState('all');
+  const [dateRangeType, setDateRangeType] = useState('7d'); // 7d, 30d, custom
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  
   // Hover states for Pie charts
   const [activeIndexType, setActiveIndexType] = useState(null);
   const [activeIndexStatus, setActiveIndexStatus] = useState(null);
   const [activeIndexPriority, setActiveIndexPriority] = useState(null);
 
-  useEffect(() => {
-    api.get('/dashboard').then(res => {
+  const fetchData = (pId, rangeType, start, end) => {
+    setLoading(true);
+    let url = `/dashboard?projectId=${pId}`;
+    
+    let s = start;
+    let e = end;
+
+    if (rangeType === '7d') {
+      const d = new Date();
+      e = d.toISOString().split('T')[0];
+      d.setDate(d.getDate() - 6);
+      s = d.toISOString().split('T')[0];
+    } else if (rangeType === '30d') {
+      const d = new Date();
+      e = d.toISOString().split('T')[0];
+      d.setDate(d.getDate() - 29);
+      s = d.toISOString().split('T')[0];
+    }
+
+    if (s && e) {
+      url += `&startDate=${s}&endDate=${e}`;
+    }
+
+    api.get(url).then(res => {
       setData(res.data);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => {
+    if (dateRangeType !== 'custom') {
+      fetchData(projectId, dateRangeType);
+    } else if (!customStart && !customEnd) {
+      // First time selecting custom, maybe don't fetch yet or use defaults
+      fetchData(projectId, dateRangeType);
+    }
+  }, [projectId, dateRangeType]);
+
+  const handleCustomApply = () => {
+    fetchData(projectId, 'custom', customStart, customEnd);
+  };
 
   if (loading) return <div className="loading-screen"><div className="loading-spinner"/></div>;
 
   const { 
     burndown = [], hourStats = [], typeCounts = [], priorityCounts = [], statusCounts = [], stats = {}, totalTickets = 0,
-    workloadStats = [], accuracyStats = [], agingTasks = [], projectBurndown = { data: [] }
+    workloadStats = [], accuracyStats = [], agingTasks = [], projectBurndown = { data: [] }, projects = [], projectHealth = {}
   } = data || {};
 
   const burndownReady = projectBurndown && projectBurndown.data && projectBurndown.data.length > 0;
@@ -153,15 +194,165 @@ export default function AnalyticsPage() {
 
   return (
     <div className="page-layout" style={{ background: 'var(--bg-document)' }}>
-      <style>{`.recharts-sector { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }`}</style>
+      <style>{`
+        .recharts-sector { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .filter-select { background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--text-primary); padding: 8px 12px; borderRadius: 8px; fontSize: 13px; fontWeight: 500; cursor: pointer; outline: none; transition: border-color 0.2s; }
+        .filter-select:hover { border-color: var(--accent-purple); }
+        .date-input { background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--text-primary); padding: 7px 10px; borderRadius: 6px; fontSize: 13px; outline: none; }
+        .apply-btn { background: var(--accent-purple); color: white; border: none; padding: 8px 16px; borderRadius: 6px; fontSize: 13px; fontWeight: 600; cursor: pointer; transition: opacity 0.2s; }
+        .apply-btn:hover { opacity: 0.9; }
+      `}</style>
       <div className="page-content" style={{ maxWidth: 1200, margin: '20px auto', padding: '0 20px', paddingBottom: 60 }}>
         
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, gap: 20, flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ fontSize: 28, margin: '0 0 8px 0', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Analytics & Reporting</h1>
             <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 15 }}>Visualize team velocity and project distributions.</p>
           </div>
+
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Project</span>
+              <select className="filter-select" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+                <option value="all">All Projects</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Date Range</span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <select className="filter-select" value={dateRangeType} onChange={(e) => setDateRangeType(e.target.value)}>
+                  <option value="7d">Last 7 Days</option>
+                  <option value="30d">Last 30 Days</option>
+                  <option value="custom">Custom Range</option>
+                </select>
+
+                {dateRangeType === 'custom' && (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'var(--bg-panel)', padding: '4px 8px', borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                    <input type="date" className="date-input" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+                    <span style={{ color: 'var(--text-muted)' }}>-</span>
+                    <input type="date" className="date-input" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+                    <button className="apply-btn" onClick={handleCustomApply}>Apply</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
+
+        {/* Project Pulse - High Level Summary */}
+        {projectHealth && projectHealth.summary && (
+          <div className="dash-panel" style={{ 
+            marginBottom: 30, 
+            padding: '32px 40px', 
+            borderRadius: 20,
+            position: 'relative',
+            overflow: 'hidden',
+            border: 'none',
+            background: projectHealth.status === 'bad' 
+              ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(20, 20, 25, 1) 100%)' 
+              : projectHealth.status === 'warning'
+                ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(20, 20, 25, 1) 100%)'
+                : 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(20, 20, 25, 1) 100%)',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
+            borderLeft: `6px solid ${projectHealth.status === 'bad' ? '#ef4444' : projectHealth.status === 'warning' ? '#f59e0b' : '#10b981'}`
+          }}>
+            {/* Background Accent */}
+            <div style={{
+              position: 'absolute', top: -100, right: -100, width: 300, height: 300,
+              background: projectHealth.status === 'bad' ? '#ef4444' : projectHealth.status === 'warning' ? '#f59e0b' : '#10b981',
+              filter: 'blur(120px)', opacity: 0.1, pointerEvents: 'none'
+            }} />
+
+            <div style={{ display: 'flex', gap: 40, alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+                  <div style={{ 
+                    padding: '6px 14px', borderRadius: 20, fontSize: 11, fontWeight: 800, 
+                    textTransform: 'uppercase', letterSpacing: '0.1em',
+                    background: projectHealth.status === 'bad' ? '#ef4444' : projectHealth.status === 'warning' ? '#f59e0b' : '#10b981',
+                    color: '#000'
+                  }}>
+                    Project Pulse
+                  </div>
+                  <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>
+                    Real-time status analysis
+                  </span>
+                </div>
+                
+                <h2 style={{ 
+                  fontSize: 24, lineHeight: 1.4, color: 'var(--text-primary)', 
+                  fontWeight: 600, margin: '0 0 24px 0', maxWidth: 800 
+                }}>
+                  {projectHealth.summary}
+                </h2>
+
+                {projectHealth.nextSteps && (
+                  <div style={{ 
+                    background: 'rgba(255,255,255,0.05)', 
+                    padding: '16px 20px', 
+                    borderRadius: 12, 
+                    marginBottom: 24,
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12
+                  }}>
+                    <span style={{ 
+                      fontSize: 10, fontWeight: 900, color: projectHealth.status === 'bad' ? '#ef4444' : projectHealth.status === 'warning' ? '#f59e0b' : '#10b981', 
+                      textTransform: 'uppercase', background: 'rgba(0,0,0,0.3)', padding: '4px 8px', borderRadius: 4
+                    }}>Next Steps</span>
+                    <span style={{ fontSize: 14, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                      {projectHealth.nextSteps}
+                    </span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 40 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.05em' }}>Blockers</div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: projectHealth.metrics?.blockers > 0 ? '#ef4444' : 'var(--text-primary)' }}>
+                      {projectHealth.metrics?.blockers || 0}
+                      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', marginLeft: 6 }}>high priority</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.05em' }}>Stale Tasks</div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: projectHealth.metrics?.staleCount > 2 ? '#f59e0b' : 'var(--text-primary)' }}>
+                      {projectHealth.metrics?.staleCount || 0}
+                      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', marginLeft: 6 }}>inactive 3d+</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.05em' }}>Velocity</div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: '#8b5cf6', textTransform: 'capitalize' }}>
+                      {projectHealth.metrics?.velocity || 'stable'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ textAlign: 'right', padding: '10px 0' }}>
+                <div style={{ position: 'relative', width: 120, height: 120, margin: '0 0 16px auto' }}>
+                  <svg width="120" height="120" viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
+                    <circle cx="60" cy="60" r="54" fill="none" stroke={projectHealth.status === 'bad' ? '#ef4444' : projectHealth.status === 'warning' ? '#f59e0b' : '#10b981'} 
+                      strokeWidth="8" strokeDasharray={`${(100 - projectHealth.percentagePending) * 3.39} 339`} 
+                      transform="rotate(-90 60 60)" strokeLinecap="round" />
+                  </svg>
+                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)' }}>{100 - projectHealth.percentagePending}%</div>
+                    <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Done</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: projectHealth.status === 'bad' ? '#ef4444' : 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
+                  {projectHealth.daysRemaining < 0 ? 'Project Delayed' : `${projectHealth.daysRemaining} Days to Target`}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Top KPI Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 20, marginBottom: 30 }}>
@@ -182,7 +373,9 @@ export default function AnalyticsPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20, marginBottom: 20 }}>
           {/* Burndown Chart */}
           <div className="dash-panel" style={{ padding: 24, paddingBottom: 10 }}>
-            <h3 style={{ margin: '0 0 24px 0', fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>Velocity (Last 7 Days)</h3>
+            <h3 style={{ margin: '0 0 24px 0', fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>
+              Velocity ({dateRangeType === '7d' ? 'Last 7 Days' : dateRangeType === '30d' ? 'Last 30 Days' : 'Custom Range'})
+            </h3>
             <div style={{ width: '100%', height: 300 }}>
               <ResponsiveContainer>
                 <AreaChart data={burndown} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
