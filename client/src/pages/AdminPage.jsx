@@ -214,6 +214,7 @@ function ProjectMembersModal({ project, onClose, onUpdated }) {
   const [allUsers, setAllUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pendingRoles, setPendingRoles] = useState({}); // userId -> newRole
+  const [pendingRemovals, setPendingRemovals] = useState([]); // array of userIds
   const [saving, setSaving] = useState(false);
 
   // Search & Selection State
@@ -237,32 +238,36 @@ function ProjectMembersModal({ project, onClose, onUpdated }) {
   };
 
   const handleSaveAll = async () => {
-    const entries = Object.entries(pendingRoles);
-    if (entries.length === 0) return onClose();
+    const roleEntries = Object.entries(pendingRoles);
+    if (roleEntries.length === 0 && pendingRemovals.length === 0) return onClose();
     
     setSaving(true);
     try {
-      for (const [uid, role] of entries) {
+      // 1. Handle Role Changes
+      for (const [uid, role] of roleEntries) {
         await api.patch(`/users/${uid}/role`, { role });
       }
+      
+      // 2. Handle Removals
+      for (const uid of pendingRemovals) {
+        await api.delete(`/projects/${project.id}/members/${uid}`);
+      }
+      
       if (onUpdated) onUpdated();
       onClose();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to update some roles');
+      alert(err.response?.data?.error || 'Failed to apply some changes');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleRemove = async (userId) => {
-    if (!confirm('Remove member from project?')) return;
-    try {
-      await api.delete(`/projects/${project.id}/members/${userId}`);
-      setMembers(prev => prev.filter(m => m.id !== userId));
-      if (onUpdated) onUpdated();
-    } catch (err) {
-      alert('Failed to remove member');
-    }
+  const handleRemove = (userId) => {
+    setPendingRemovals(prev => [...prev, userId]);
+  };
+
+  const handleUndoRemove = (userId) => {
+    setPendingRemovals(prev => prev.filter(id => id !== userId));
   };
 
   const handleAddMember = async (userId) => {
@@ -307,7 +312,7 @@ function ProjectMembersModal({ project, onClose, onUpdated }) {
      u.email.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const hasChanges = Object.keys(pendingRoles).length > 0;
+  const hasChanges = Object.keys(pendingRoles).length > 0 || pendingRemovals.length > 0;
 
   return (
     <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && !saving && onClose()}>
@@ -393,47 +398,61 @@ function ProjectMembersModal({ project, onClose, onUpdated }) {
                 </tr>
               </thead>
               <tbody>
-                {members.map(m => (
-                  <tr key={m.id}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div className="user-avatar" style={{ background: m.avatar_color, width: 28, height: 28, fontSize: 12 }}>
-                          {initials(m.name)}
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 500 }}>
-                            {m.name} 
-                            {m.id === currentUser.id && <span style={{ color: 'var(--text-muted)', fontSize: 10, marginLeft: 4 }}>(You)</span>}
-                            {m.id === project.creator_id && <span className="role-badge role-admin" style={{ fontSize: 9, marginLeft: 6, padding: '1px 4px' }}>Creator</span>}
+                {members.map(m => {
+                  const isPendingRemoval = pendingRemovals.includes(m.id);
+                  return (
+                    <tr key={m.id} style={{ opacity: isPendingRemoval ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div className="user-avatar" style={{ background: m.avatar_color, width: 28, height: 28, fontSize: 12 }}>
+                            {initials(m.name)}
                           </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{m.email}</div>
+                          <div>
+                            <div style={{ fontWeight: 500, textDecoration: isPendingRemoval ? 'line-through' : 'none' }}>
+                              {m.name} 
+                              {m.id === currentUser.id && <span style={{ color: 'var(--text-muted)', fontSize: 10, marginLeft: 4 }}>(You)</span>}
+                              {m.id === project.creator_id && <span className="role-badge role-admin" style={{ fontSize: 9, marginLeft: 6, padding: '1px 4px' }}>Creator</span>}
+                              {isPendingRemoval && <span style={{ color: 'var(--status-critical)', fontSize: 10, marginLeft: 8, fontWeight: 700 }}>PENDING REMOVAL</span>}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{m.email}</div>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td>
-                      <select 
-                        className="form-select" 
-                        style={{ padding: '2px 8px', fontSize: 12 }} 
-                        value={pendingRoles[m.id] || m.role} 
-                        onChange={(e) => handleRoleChange(m.id, e.target.value)}
-                        disabled={saving || (!isAdmin && m.role === 'admin') || (m.id === currentUser.id) || (m.id === project.creator_id)}
-                      >
-                        <option value="member">Member</option>
-                        <option value="lead">Lead</option>
-                        {(isAdmin || m.role === 'admin') && <option value="admin">Admin</option>}
-                      </select>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button 
-                        className="btn btn-sm btn-danger" 
-                        onClick={() => handleRemove(m.id)} 
-                        disabled={saving || m.id === project.creator_id || m.id === currentUser.id || (!isAdmin && m.role === 'admin')}
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td>
+                        <select 
+                          className="form-select" 
+                          style={{ padding: '2px 8px', fontSize: 12 }} 
+                          value={pendingRoles[m.id] || m.role} 
+                          onChange={(e) => handleRoleChange(m.id, e.target.value)}
+                          disabled={saving || isPendingRemoval || (!isAdmin && m.role === 'admin') || (m.id === currentUser.id) || (m.id === project.creator_id)}
+                        >
+                          <option value="member">Member</option>
+                          <option value="lead">Lead</option>
+                          {(isAdmin || m.role === 'admin') && <option value="admin">Admin</option>}
+                        </select>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {isPendingRemoval ? (
+                          <button 
+                            className="btn btn-sm btn-secondary" 
+                            onClick={() => handleUndoRemove(m.id)}
+                            disabled={saving}
+                          >
+                            Undo
+                          </button>
+                        ) : (
+                          <button 
+                            className="btn btn-sm btn-danger" 
+                            onClick={() => handleRemove(m.id)} 
+                            disabled={saving || m.id === project.creator_id || m.id === currentUser.id || (!isAdmin && m.role === 'admin')}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
