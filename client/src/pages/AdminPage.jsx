@@ -486,6 +486,7 @@ export default function AdminPage() {
   const [managingProject, setManagingProject] = useState(null);
 
   const [pendingUserRoles, setPendingUserRoles] = useState({}); // userId -> newRole
+  const [pendingUserRemovals, setPendingUserRemovals] = useState([]); // userId
   const [savingGlobal, setSavingGlobal] = useState(false);
 
   const fetchData = useCallback(() => {
@@ -522,27 +523,38 @@ export default function AdminPage() {
     setPendingUserRoles(prev => ({ ...prev, [userId]: newRole }));
   };
 
-  const handleSaveGlobalRoles = async () => {
-    const entries = Object.entries(pendingUserRoles);
-    if (entries.length === 0) return;
+  const handleSaveGlobalChanges = async () => {
+    const roleEntries = Object.entries(pendingUserRoles);
+    if (roleEntries.length === 0 && pendingUserRemovals.length === 0) return;
+    
     setSavingGlobal(true);
     try {
-      for (const [uid, role] of entries) {
+      // 1. Update Roles
+      for (const [uid, role] of roleEntries) {
         await api.patch(`/users/${uid}/role`, { role });
       }
+      
+      // 2. Delete Users
+      for (const id of pendingUserRemovals) {
+        await api.delete(`/users/${id}`);
+      }
+      
       setPendingUserRoles({});
+      setPendingUserRemovals([]);
       fetchData();
     } catch (err) {
-      alert('Failed to update some global roles');
+      alert('Failed to apply some global changes');
     } finally {
       setSavingGlobal(false);
     }
   };
 
-  const handleDeleteUser = async id => {
-    if (!confirm('Remove this user?')) return;
-    await api.delete(`/users/${id}`);
-    setUsers(p => p.filter(u => u.id !== id));
+  const handleDeleteUser = id => {
+    setPendingUserRemovals(prev => [...prev, id]);
+  };
+
+  const handleUndoUserRemoval = id => {
+    setPendingUserRemovals(prev => prev.filter(uid => uid !== id));
   };
 
   const handleDeleteProject = async id => {
@@ -586,9 +598,9 @@ export default function AdminPage() {
                 <div style={{ fontSize: 15, fontWeight: 600 }}>{users.length} Members</div>
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
-                {Object.keys(pendingUserRoles).length > 0 && (
-                  <button className="btn btn-primary btn-sm" onClick={handleSaveGlobalRoles} disabled={savingGlobal}>
-                    {savingGlobal ? 'Saving...' : 'Save Role Changes'}
+                {(Object.keys(pendingUserRoles).length > 0 || pendingUserRemovals.length > 0) && (
+                  <button className="btn btn-primary btn-sm" onClick={handleSaveGlobalChanges} disabled={savingGlobal}>
+                    {savingGlobal ? 'Saving...' : 'Save Changes'}
                   </button>
                 )}
                 <button id="add-user-btn" className="btn btn-primary btn-sm" onClick={() => setShowAddUser(true)}>
@@ -608,47 +620,63 @@ export default function AdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map(u => (
-                    <tr key={u.id}>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div className="user-avatar" style={{ background: u.avatar_color }}>
-                            {initials(u.name)}
+                  {users.map(u => {
+                    const isPendingRemoval = pendingUserRemovals.includes(u.id);
+                    return (
+                      <tr key={u.id} style={{ opacity: isPendingRemoval ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div className="user-avatar" style={{ background: u.avatar_color }}>
+                              {initials(u.name)}
+                            </div>
+                            <div>
+                              <div style={{ textDecoration: isPendingRemoval ? 'line-through' : 'none', fontWeight: isPendingRemoval ? 400 : 500 }}>
+                                {u.name} {u.id === user.id && <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>(You)</span>}
+                                {isPendingRemoval && <span style={{ color: 'var(--status-critical)', fontSize: 10, marginLeft: 8, fontWeight: 700 }}>PENDING REMOVAL</span>}
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <div>{u.name} {u.id === user.id && <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>(You)</span>}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ color: 'var(--text-secondary)' }}>{u.email}</td>
-                      <td>
-                        <select 
-                          className="form-select" 
-                          style={{ padding: '2px 8px', fontSize: 12, width: 100 }} 
-                          value={pendingUserRoles[u.id] || u.role} 
-                          onChange={(e) => handleGlobalRoleChange(u.id, e.target.value)}
-                          disabled={savingGlobal || u.id === user.id}
-                        >
-                          <option value="member">Member</option>
-                          <option value="lead">Lead</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                      </td>
-                      <td style={{ color: 'var(--text-muted)' }}>
-                        {new Date(u.created_at).toLocaleDateString()}
-                      </td>
-                      <td>
-                        <button 
-                          id={`delete-user-${u.id}`} 
-                          className="btn btn-danger btn-sm" 
-                          onClick={() => handleDeleteUser(u.id)} 
-                          disabled={savingGlobal || u.id === user.id}
-                        >
-                          Remove
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td style={{ color: 'var(--text-secondary)' }}>{u.email}</td>
+                        <td>
+                          <select 
+                            className="form-select" 
+                            style={{ padding: '2px 8px', fontSize: 12, width: 100 }} 
+                            value={pendingUserRoles[u.id] || u.role} 
+                            onChange={(e) => handleGlobalRoleChange(u.id, e.target.value)}
+                            disabled={savingGlobal || isPendingRemoval || u.id === user.id}
+                          >
+                            <option value="member">Member</option>
+                            <option value="lead">Lead</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        </td>
+                        <td style={{ color: 'var(--text-muted)' }}>
+                          {new Date(u.created_at).toLocaleDateString()}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {isPendingRemoval ? (
+                            <button 
+                              className="btn btn-sm btn-secondary" 
+                              onClick={() => handleUndoUserRemoval(u.id)}
+                              disabled={savingGlobal}
+                            >
+                              Undo
+                            </button>
+                          ) : (
+                            <button 
+                              id={`delete-user-${u.id}`} 
+                              className="btn btn-sm btn-danger" 
+                              onClick={() => handleDeleteUser(u.id)} 
+                              disabled={savingGlobal || u.id === user.id}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
