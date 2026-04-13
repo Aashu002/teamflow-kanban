@@ -123,6 +123,19 @@ const db = {
         return { lastInsertRowid: res.lastInsertRowid, changes: res.changes };
       }
     };
+  },
+  transaction: (fn) => {
+    return (...args) => {
+      raw.exec('BEGIN');
+      try {
+        const result = fn(...args);
+        raw.exec('COMMIT');
+        return result;
+      } catch (err) {
+        raw.exec('ROLLBACK');
+        throw err;
+      }
+    };
   }
 };
 
