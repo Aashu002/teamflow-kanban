@@ -211,13 +211,23 @@ function EditProjectModal({ project, onClose, onUpdated, allUsers }) {
 function ProjectMembersModal({ project, onClose, onUpdated }) {
   const { user: currentUser, isAdmin } = useAuth();
   const [members, setMembers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pendingRoles, setPendingRoles] = useState({}); // userId -> newRole
   const [saving, setSaving] = useState(false);
 
+  // Search & Selection State
+  const [isAdding, setIsAdding] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
+
   useEffect(() => {
-    api.get(`/projects/${project.id}`).then(res => {
-      setMembers(res.data.members);
+    Promise.all([
+      api.get(`/projects/${project.id}`),
+      api.get('/users')
+    ]).then(([projRes, usersRes]) => {
+      setMembers(projRes.data.members);
+      setAllUsers(usersRes.data);
       setLoading(false);
     });
   }, [project.id]);
@@ -255,6 +265,48 @@ function ProjectMembersModal({ project, onClose, onUpdated }) {
     }
   };
 
+  const handleAddMember = async (userId) => {
+    try {
+      await api.post(`/projects/${project.id}/members`, { userId });
+      const newUser = allUsers.find(u => u.id === userId);
+      if (newUser) setMembers(prev => [...prev, newUser]);
+      if (onUpdated) onUpdated();
+    } catch (err) {
+      alert('Failed to add member');
+    }
+  };
+
+  const handleAddSelected = async () => {
+    if (selectedUserIds.length === 0) return;
+    setSaving(true);
+    try {
+      await api.post(`/projects/${project.id}/members`, { userIds: selectedUserIds });
+      const newMembers = allUsers.filter(u => selectedUserIds.includes(u.id));
+      setMembers(prev => [...prev, ...newMembers]);
+      setSelectedUserIds([]);
+      setIsAdding(false);
+      setSearchTerm('');
+      if (onUpdated) onUpdated();
+    } catch (err) {
+      alert('Failed to add members');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedUserIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const currentMemberIds = members.map(m => m.id);
+  const availableUsers = allUsers.filter(u => 
+    !currentMemberIds.includes(u.id) && 
+    (u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+     u.email.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
   const hasChanges = Object.keys(pendingRoles).length > 0;
 
   return (
@@ -263,6 +315,71 @@ function ProjectMembersModal({ project, onClose, onUpdated }) {
         <div className="modal-header">
           <span className="modal-title">Manage Members: {project.name}</span>
           <button className="modal-close" onClick={onClose} disabled={saving}>✕</button>
+        </div>
+
+        <div style={{ padding: '0 0 16px 0', borderBottom: '1px solid var(--border-color)', marginBottom: 20 }}>
+          {!isAdding ? (
+            <button className="btn btn-primary btn-sm" onClick={() => setIsAdding(true)}>
+              + Add Member
+            </button>
+          ) : (
+            <div className="add-member-section">
+              <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                <input 
+                  className="form-input" 
+                  placeholder="Search by name or email..." 
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  autoFocus
+                />
+                <button className="btn btn-secondary btn-sm" onClick={() => { setIsAdding(false); setSelectedUserIds([]); setSearchTerm(''); }}>
+                  Cancel
+                </button>
+              </div>
+
+              {searchTerm.length > 0 && (
+                <div className="search-results" style={{ 
+                  maxHeight: 200, overflowY: 'auto', background: 'rgba(255,255,255,0.03)', 
+                  borderRadius: 8, padding: 8, border: '1px solid var(--border-color)' 
+                }}>
+                  {availableUsers.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: 12, color: 'var(--text-muted)', fontSize: 13 }}>No users found</div>
+                  ) : (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 8px 8px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Results</span>
+                        {selectedUserIds.length > 0 && (
+                          <button className="btn btn-primary btn-sm" style={{ padding: '2px 8px', fontSize: 11 }} onClick={handleAddSelected} disabled={saving}>
+                            Add {selectedUserIds.length} Selected
+                          </button>
+                        )}
+                      </div>
+                      {availableUsers.map(u => (
+                        <div key={u.id} style={{ 
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+                          padding: '6px 8px', borderRadius: 6, transition: 'background 0.2s'
+                        }} className="search-result-row">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, cursor: 'pointer' }} onClick={() => toggleSelect(u.id)}>
+                            <input type="checkbox" checked={selectedUserIds.includes(u.id)} onChange={() => {}} onClick={e => e.stopPropagation()} />
+                            <div className="user-avatar" style={{ background: u.avatar_color, width: 24, height: 24, fontSize: 10 }}>
+                              {initials(u.name)}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 500 }}>{u.name}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{u.email}</div>
+                            </div>
+                          </div>
+                          <button className="btn btn-sm" style={{ padding: '2px 8px', fontSize: 11, background: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa' }} onClick={() => handleAddMember(u.id)}>
+                            Quick Add
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         
         {loading ? <div className="loading-spinner" style={{ margin: '40px auto' }} /> : (
@@ -355,13 +472,13 @@ export default function AdminPage() {
   const fetchData = useCallback(() => {
     setLoading(true);
     Promise.all([
-      isAdmin ? api.get('/users') : Promise.resolve({ data: [] }), 
+      api.get('/users'), 
       api.get('/projects'), 
       api.get('/projects/requests/pending')
     ])
       .then(([u, p, r]) => { setUsers(u.data); setProjects(p.data); setRequests(r.data); })
       .finally(() => setLoading(false));
-  }, [isAdmin]);
+  }, []);
 
   useEffect(() => {
     fetchData();

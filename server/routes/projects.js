@@ -210,7 +210,17 @@ router.post('/:id/members', authMiddleware, (req, res) => {
     return res.status(403).json({ error: 'Admin or Project Lead access required' });
   }
 
-  db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)').run(req.params.id, req.body.userId);
+  const { userId, userIds } = req.body;
+  const stmt = db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)');
+
+  if (Array.isArray(userIds)) {
+    for (const uid of userIds) {
+      stmt.run(req.params.id, uid);
+    }
+  } else if (userId) {
+    stmt.run(req.params.id, userId);
+  }
+
   res.json({ success: true });
 });
 
