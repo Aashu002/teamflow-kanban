@@ -206,7 +206,7 @@ export default function AnalyticsPage() {
         
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, gap: 20, flexWrap: 'wrap' }}>
           <div>
-            <h1 style={{ fontSize: 28, margin: '0 0 8px 0', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Analytics & Reporting</h1>
+            <h1 style={{ fontSize: 28, fontWeight: 800, margin: '0 0 8px 0', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Analytics & Reporting</h1>
             <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 15 }}>Visualize team velocity and project distributions.</p>
           </div>
 
