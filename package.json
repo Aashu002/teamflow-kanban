@@ -5,6 +5,7 @@
   "scripts": {
     "build": "cd client && npm install && npm run build && cd ../server && npm install",
     "start": "NODE_ENV=production node server/index.js",
+    "deploy": "git pull && npm run build && pm2 restart teamflow",
     "dev": "./start.sh"
   },
   "dependencies": {},
