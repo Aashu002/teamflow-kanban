@@ -469,6 +469,67 @@ function ProjectMembersModal({ project, onClose, onUpdated }) {
   );
 }
 
+function DeleteProjectModal({ project, onClose, onConfirmed }) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleConfirm = async () => {
+    setDeleting(true);
+    setError('');
+    try {
+      await api.delete(`/projects/${project.id}`);
+      onConfirmed(project.id);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to delete project');
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && !deleting && onClose()}>
+      <div className="modal" style={{ maxWidth: 400, textAlign: 'center', padding: '40px 30px' }}>
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ 
+            width: 60, height: 60, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', 
+            display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px',
+            color: '#ef4444', fontSize: 30
+          }}>
+            <span style={{ margin: 'auto' }}>!</span>
+          </div>
+          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 12, color: 'var(--text-primary)' }}>Confirm Delete</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 15, lineHeight: 1.6 }}>
+            Delete project <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>"{project.name}"</span> and all its tasks?
+          </p>
+        </div>
+
+        {error && <div className="alert alert-error" style={{ marginBottom: 20 }}>{error}</div>}
+
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+          <button 
+            className="btn" 
+            style={{ 
+              background: 'transparent', border: '1px solid #ef4444', color: '#ef4444', 
+              padding: '10px 24px', borderRadius: 10, fontWeight: 600
+            }} 
+            onClick={onClose}
+            disabled={deleting}
+          >
+            Cancel
+          </button>
+          <button 
+            className="btn btn-primary" 
+            style={{ padding: '10px 24px', borderRadius: 10 }}
+            onClick={handleConfirm}
+            disabled={deleting}
+          >
+            {deleting ? 'Deleting...' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { user, isAdmin } = useAuth();
   const isLead = user?.role === 'lead';
@@ -484,6 +545,7 @@ export default function AdminPage() {
   const [showAddProject, setShowAddProject] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [managingProject, setManagingProject] = useState(null);
+  const [projectToDelete, setProjectToDelete] = useState(null);
 
   const [pendingUserRoles, setPendingUserRoles] = useState({}); // userId -> newRole
   const [pendingUserRemovals, setPendingUserRemovals] = useState([]); // userId
@@ -558,9 +620,13 @@ export default function AdminPage() {
   };
 
   const handleDeleteProject = async id => {
-    if (!confirm('Delete project and all its tasks?')) return;
-    await api.delete(`/projects/${id}`);
+    const project = projects.find(p => p.id === id);
+    if (project) setProjectToDelete(project);
+  };
+
+  const executeDeleteProject = async id => {
     setProjects(p => p.filter(pr => pr.id !== id));
+    setProjectToDelete(null);
   };
 
   return (
@@ -822,6 +888,13 @@ export default function AdminPage() {
           allUsers={users}
           onClose={() => setEditingProject(null)}
           onUpdated={() => { fetchData(); setEditingProject(null); }}
+        />
+      )}
+      {projectToDelete && (
+        <DeleteProjectModal
+          project={projectToDelete}
+          onClose={() => setProjectToDelete(null)}
+          onConfirmed={executeDeleteProject}
         />
       )}
     </div>
