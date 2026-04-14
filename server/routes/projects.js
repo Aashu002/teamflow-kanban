@@ -60,12 +60,12 @@ router.post('/', authMiddleware, adminOnly, async (req, res) => {
     const projectId = result.lastInsertRowid;
     
     // Ensure the owner is a member
-    await db.prepare('INSERT INTO project_members (project_id, user_id) ON CONFLICT DO NOTHING VALUES (?, ?)').run(projectId, ownerId);
+    await db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING').run(projectId, ownerId);
 
     if (Array.isArray(memberIds)) {
       for (const uid of memberIds) {
         if (uid !== ownerId) {
-          await db.prepare('INSERT INTO project_members (project_id, user_id) ON CONFLICT DO NOTHING VALUES (?, ?)').run(projectId, uid);
+          await db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING').run(projectId, uid);
         }
       }
     }
@@ -142,7 +142,7 @@ router.put('/requests/:id/:action', authMiddleware, async (req, res) => {
 
   if (action === 'approve') {
     await db.prepare("UPDATE project_requests SET status = 'approved' WHERE id = ?").run(id);
-    await db.prepare('INSERT INTO project_members (project_id, user_id) ON CONFLICT DO NOTHING VALUES (?, ?)').run(reqRow.project_id, reqRow.user_id);
+    await db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING').run(reqRow.project_id, reqRow.user_id);
   } else if (action === 'reject') {
     await db.prepare("UPDATE project_requests SET status = 'rejected' WHERE id = ?").run(id);
   }
@@ -204,7 +204,7 @@ router.patch('/:id', authMiddleware, async (req, res) => {
     
     await db.prepare(sql).run(...params);
     if (owner_id !== undefined && owner_id !== null) {
-      await db.prepare('INSERT INTO project_members (project_id, user_id) ON CONFLICT DO NOTHING VALUES (?, ?)').run(projectId, Number(owner_id));
+      await db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING').run(projectId, Number(owner_id));
     }
   }
   
@@ -228,7 +228,7 @@ router.post('/:id/members', authMiddleware, async (req, res) => {
   }
 
   const { userId, userIds } = req.body;
-  const stmt = db.prepare('INSERT INTO project_members (project_id, user_id) ON CONFLICT DO NOTHING VALUES (?, ?)');
+  const stmt = db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING');
 
   if (Array.isArray(userIds)) {
     for (const uid of userIds) {
