@@ -45,30 +45,39 @@ router.get('/', authMiddleware, (req, res) => {
 
 // POST /api/projects
 router.post('/', authMiddleware, adminOnly, (req, res) => {
-  const { name, description, memberIds, estimated_completion_date, project_goal, owner_id } = req.body;
-  if (!name) return res.status(400).json({ error: 'Project name is required' });
+  try {
+    const { name, description, memberIds, estimated_completion_date, project_goal, owner_id } = req.body;
+    if (!name) return res.status(400).json({ error: 'Project name is required' });
 
-  // Use the provided owner_id (assigned lead) or default to the admin creator
-  const ownerId = owner_id || req.user.id;
-  const keyPrefix = makeKeyPrefix(name);
+    // Use the provided owner_id (assigned lead) or default to the admin creator
+    const ownerId = owner_id || req.user.id;
+    const keyPrefix = makeKeyPrefix(name);
 
-  const result = db.prepare(
-    'INSERT INTO projects (name, key_prefix, description, owner_id, creator_id, estimated_completion_date, project_goal) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(name, keyPrefix, description || '', ownerId, req.user.id, estimated_completion_date || null, project_goal || null);
+    const result = db.prepare(
+      'INSERT INTO projects (name, key_prefix, description, owner_id, creator_id, estimated_completion_date, project_goal) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(name, keyPrefix, description || '', ownerId, req.user.id, estimated_completion_date || null, project_goal || null);
 
-  const projectId = result.lastInsertRowid;
-  
-  // Ensure the owner is a member
-  db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)').run(projectId, ownerId);
+    const projectId = result.lastInsertRowid;
+    
+    // Ensure the owner is a member
+    db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)').run(projectId, ownerId);
 
-  if (Array.isArray(memberIds)) {
-    for (const uid of memberIds) {
-      if (uid !== ownerId) {
-        db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)').run(projectId, uid);
+    if (Array.isArray(memberIds)) {
+      for (const uid of memberIds) {
+        if (uid !== ownerId) {
+          db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)').run(projectId, uid);
+        }
       }
     }
+    res.status(201).json({ id: projectId, name, key_prefix: keyPrefix, description, owner_id: ownerId, creator_id: req.user.id });
+  } catch (error) {
+    console.error('Project creation failed:', error);
+    res.status(500).json({ 
+      error: 'Project creation failed', 
+      message: error.message,
+      stack: error.stack
+    });
   }
-  res.status(201).json({ id: projectId, name, key_prefix: keyPrefix, description, owner_id: ownerId, creator_id: req.user.id });
 });
 
 // GET /api/projects/all-directory

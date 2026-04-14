@@ -3,8 +3,15 @@ const fs = require('fs');
 const path = require('path');
 
 const dbPath = process.env.DB_PATH || path.join(__dirname, 'kanban.db');
+console.log('📦 Database starting at:', dbPath);
+
 // Ensure parent directory exists (critical for production volumes)
-fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+try {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  console.log('✅ Storage directory confirmed');
+} catch (err) {
+  console.error('❌ Failed to create storage directory:', err);
+}
 
 const raw = new DatabaseSync(dbPath);
 
