@@ -4,6 +4,7 @@ const fs = require('fs');
 const multer = require('multer');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
@@ -49,7 +50,7 @@ async function selectTask(id) {
 }
 
 // GET /api/tasks/by-key/:projectId/:taskNumber  — lookup by human key e.g. TF-3
-router.get('/by-key/:projectId/:taskNumber', authMiddleware, async (req, res) => {
+router.get('/by-key/:projectId/:taskNumber', authMiddleware, asyncHandler(async (req, res) => {
   const { projectId, taskNumber } = req.params;
   if (!(await isMember(projectId, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
 
@@ -111,10 +112,10 @@ router.get('/by-key/:projectId/:taskNumber', authMiddleware, async (req, res) =>
   });
 
   res.json({ ...task, subtasks, comments, attachments, hourLogs, totalHoursLogged, links });
-});
+}));
 
 // GET /api/tasks/search
-router.get('/search', authMiddleware, async (req, res) => {
+router.get('/search', authMiddleware, asyncHandler(async (req, res) => {
   const { creator, search } = req.query;
   const conditions = [];
   const params = [];
@@ -173,10 +174,10 @@ router.get('/search', authMiddleware, async (req, res) => {
   `).all(...params);
 
   res.json(tasks);
-});
+}));
 
 // GET /api/tasks?projectId=X
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, asyncHandler(async (req, res) => {
   const { projectId } = req.query;
   if (!projectId) return res.status(400).json({ error: 'projectId required' });
   if (!(await isMember(projectId, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
@@ -193,10 +194,10 @@ router.get('/', authMiddleware, async (req, res) => {
     ORDER BY t.task_number DESC
   `).all(projectId);
   res.json(tasks);
-});
+}));
 
 // GET /api/tasks/:id — full task detail
-router.get('/:id', authMiddleware, async (req, res) => {
+router.get('/:id', authMiddleware, asyncHandler(async (req, res) => {
   const task = await selectTask(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
   if (!(await isMember(task.project_id, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
@@ -230,10 +231,10 @@ router.get('/:id', authMiddleware, async (req, res) => {
   const totalHoursLogged = hourLogs.reduce((s, l) => s + l.hours, 0);
 
   res.json({ ...task, subtasks, comments, attachments, hourLogs, totalHoursLogged });
-});
+}));
 
 // POST /api/tasks
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, asyncHandler(async (req, res) => {
   const { title, description, status, priority, task_type, projectId, assigneeId, parentId } = req.body;
   if (!title || !projectId) return res.status(400).json({ error: 'Title and projectId required' });
   if (!(await isMember(projectId, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
@@ -259,10 +260,10 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 
   res.status(201).json(task);
-});
+}));
 
 // PATCH /api/tasks/:id
-router.patch('/:id', authMiddleware, async (req, res) => {
+router.patch('/:id', authMiddleware, asyncHandler(async (req, res) => {
   const task = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
   if (!(await isMember(task.project_id, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
@@ -294,10 +295,10 @@ router.patch('/:id', authMiddleware, async (req, res) => {
   }
 
   res.json(updatedTask);
-});
+}));
 
 // POST /api/tasks/:id/move — Transfer task to a different project or change key details
-router.post('/:id/move', authMiddleware, async (req, res) => {
+router.post('/:id/move', authMiddleware, asyncHandler(async (req, res) => {
   const task = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
   
@@ -346,10 +347,10 @@ router.post('/:id/move', authMiddleware, async (req, res) => {
   }
 
   res.json(updatedTask);
-});
+}));
 
 // DELETE /api/tasks/:id
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, asyncHandler(async (req, res) => {
   const task = await selectTask(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
   
@@ -367,12 +368,12 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   }
 
   res.json({ success: true });
-});
+}));
 
 // ─── Hour Logging ────────────────────────────────────────────────────────────
 
 // POST /api/tasks/:id/log-hours
-router.post('/:id/log-hours', authMiddleware, async (req, res) => {
+router.post('/:id/log-hours', authMiddleware, asyncHandler(async (req, res) => {
   const task = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
   if (!(await isMember(task.project_id, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
@@ -391,21 +392,21 @@ router.post('/:id/log-hours', authMiddleware, async (req, res) => {
   `).get(result.lastInsertRowid);
 
   res.status(201).json(log);
-});
+}));
 
 // DELETE /api/tasks/:id/log-hours/:logId
-router.delete('/:id/log-hours/:logId', authMiddleware, async (req, res) => {
+router.delete('/:id/log-hours/:logId', authMiddleware, asyncHandler(async (req, res) => {
   const log = await db.prepare('SELECT * FROM hour_logs WHERE id = ? AND task_id = ?').get(req.params.logId, req.params.id);
   if (!log) return res.status(404).json({ error: 'Log not found' });
   if (log.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Not authorized' });
   await db.prepare('DELETE FROM hour_logs WHERE id = ?').run(req.params.logId);
   res.json({ success: true });
-});
+}));
 
 // ─── Comments ────────────────────────────────────────────────────────────────
 
 // GET /api/tasks/:id/comments
-router.get('/:id/comments', authMiddleware, async (req, res) => {
+router.get('/:id/comments', authMiddleware, asyncHandler(async (req, res) => {
   const task = await db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
   if (!(await isMember(task.project_id, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
@@ -416,10 +417,10 @@ router.get('/:id/comments', authMiddleware, async (req, res) => {
     WHERE c.task_id = ? ORDER BY c.created_at ASC
   `).all(req.params.id);
   res.json(comments);
-});
+}));
 
 // POST /api/tasks/:id/comments
-router.post('/:id/comments', authMiddleware, async (req, res) => {
+router.post('/:id/comments', authMiddleware, asyncHandler(async (req, res) => {
   const task = await db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
   if (!(await isMember(task.project_id, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
@@ -441,10 +442,10 @@ router.post('/:id/comments', authMiddleware, async (req, res) => {
   }
 
   res.status(201).json(comment);
-});
+}));
 
 // PATCH /api/tasks/:id/comments/:cid
-router.patch('/:id/comments/:cid', authMiddleware, async (req, res) => {
+router.patch('/:id/comments/:cid', authMiddleware, asyncHandler(async (req, res) => {
   const comment = await db.prepare('SELECT * FROM comments WHERE id = ? AND task_id = ?').get(req.params.cid, req.params.id);
   if (!comment) return res.status(404).json({ error: 'Comment not found' });
   if (comment.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Not authorized' });
@@ -465,10 +466,10 @@ router.patch('/:id/comments/:cid', authMiddleware, async (req, res) => {
   }
 
   res.json(updated);
-});
+}));
 
 // DELETE /api/tasks/:id/comments/:cid
-router.delete('/:id/comments/:cid', authMiddleware, async (req, res) => {
+router.delete('/:id/comments/:cid', authMiddleware, asyncHandler(async (req, res) => {
   const comment = await db.prepare('SELECT * FROM comments WHERE id = ? AND task_id = ?').get(req.params.cid, req.params.id);
   if (!comment) return res.status(404).json({ error: 'Comment not found' });
   if (comment.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Not authorized' });
@@ -482,12 +483,12 @@ router.delete('/:id/comments/:cid', authMiddleware, async (req, res) => {
   }
 
   res.json({ success: true });
-});
+}));
 
 // ─── Attachments ──────────────────────────────────────────────────────────────
 
 // POST /api/tasks/:id/attachments
-router.post('/:id/attachments', authMiddleware, upload.single('file'), async (req, res) => {
+router.post('/:id/attachments', authMiddleware, upload.single('file'), asyncHandler(async (req, res) => {
   const task = await db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
   if (!(await isMember(task.project_id, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
@@ -501,10 +502,10 @@ router.post('/:id/attachments', authMiddleware, upload.single('file'), async (re
     SELECT a.*, u.name as user_name FROM attachments a LEFT JOIN users u ON u.id = a.user_id WHERE a.id = ?
   `).get(result.lastInsertRowid);
   res.status(201).json(attachment);
-});
+}));
 
 // DELETE /api/tasks/:id/attachments/:aid
-router.delete('/:id/attachments/:aid', authMiddleware, async (req, res) => {
+router.delete('/:id/attachments/:aid', authMiddleware, asyncHandler(async (req, res) => {
   const att = await db.prepare('SELECT * FROM attachments WHERE id = ? AND task_id = ?').get(req.params.aid, req.params.id);
   if (!att) return res.status(404).json({ error: 'Attachment not found' });
   if (att.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Not authorized' });
@@ -515,11 +516,12 @@ router.delete('/:id/attachments/:aid', authMiddleware, async (req, res) => {
 
   await db.prepare('DELETE FROM attachments WHERE id = ?').run(req.params.aid);
   res.json({ success: true });
-});
+}));
+
 // ─── Links ────────────────────────────────────────────────────────────────────
 
 // POST /api/tasks/:id/links
-router.post('/:id/links', authMiddleware, async (req, res) => {
+router.post('/:id/links', authMiddleware, asyncHandler(async (req, res) => {
   const { linkedTaskId, linkType } = req.body;
   if (!linkedTaskId || !linkType) return res.status(400).json({ error: 'Missing properties' });
   
@@ -565,10 +567,10 @@ router.post('/:id/links', authMiddleware, async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Failed to create link' });
   }
-});
+}));
 
 // DELETE /api/tasks/:id/links/:linkId
-router.delete('/:id/links/:linkId', authMiddleware, async (req, res) => {
+router.delete('/:id/links/:linkId', authMiddleware, asyncHandler(async (req, res) => {
   const link = await db.prepare('SELECT * FROM task_links WHERE id = ? AND (task_id = ? OR linked_task_id = ?)').get(req.params.linkId, req.params.id, req.params.id);
   if (!link) return res.status(404).json({ error: 'Link not found' });
   
@@ -577,6 +579,6 @@ router.delete('/:id/links/:linkId', authMiddleware, async (req, res) => {
 
   await db.prepare('DELETE FROM task_links WHERE id = ?').run(req.params.linkId);
   res.json({ success: true });
-});
+}));
 
 module.exports = router;

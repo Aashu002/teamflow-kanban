@@ -12,7 +12,10 @@ if (!connectionString && isProd) {
 
 const pool = new Pool({
   connectionString: connectionString,
-  ssl: isProd ? { rejectUnauthorized: false } : false
+  ssl: isProd ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
 });
 
 // Helper to translate SQLite '?' to Postgres '$1, $2...'
@@ -22,7 +25,16 @@ function translateSql(sql) {
 }
 
 const db = {
-  query: (text, params) => pool.query(text, params),
+  query: async (text, params) => {
+    try {
+      return await pool.query(text, params);
+    } catch (err) {
+      console.error('❌ SQL Query Error:', err.message);
+      console.error('👉 SQL:', text);
+      console.error('👉 Params:', params);
+      throw err;
+    }
+  },
   
   // Compatibility layer for existing sync-style code
   // NOTE: These are now ASYNC and must be awaited in routes
@@ -31,12 +43,24 @@ const db = {
     
     return {
       all: async (...params) => {
-        const res = await pool.query(pgSql, params);
-        return res.rows;
+        try {
+          const res = await pool.query(pgSql, params);
+          return res.rows;
+        } catch (err) {
+          console.error('❌ SQL All Error:', err.message);
+          console.error('👉 SQL:', pgSql);
+          throw err;
+        }
       },
       get: async (...params) => {
-        const res = await pool.query(pgSql, params);
-        return res.rows[0];
+        try {
+          const res = await pool.query(pgSql, params);
+          return res.rows[0];
+        } catch (err) {
+          console.error('❌ SQL Get Error:', err.message);
+          console.error('👉 SQL:', pgSql);
+          throw err;
+        }
       },
       run: async (...params) => {
         // We append RETURNING id if it's an INSERT to mock lastInsertRowid
@@ -45,11 +69,17 @@ const db = {
           finalSql += ' RETURNING id';
         }
         
-        const res = await pool.query(finalSql, params);
-        return { 
-          lastInsertRowid: res.rows[0]?.id || null, 
-          changes: res.rowCount 
-        };
+        try {
+          const res = await pool.query(finalSql, params);
+          return { 
+            lastInsertRowid: res.rows[0]?.id || null, 
+            changes: res.rowCount 
+          };
+        } catch (err) {
+          console.error('❌ SQL Run Error:', err.message);
+          console.error('👉 SQL:', finalSql);
+          throw err;
+        }
       }
     };
   },

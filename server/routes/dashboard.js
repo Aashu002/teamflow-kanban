@@ -1,10 +1,11 @@
 const express = require('express');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
+const asyncHandler = require('../middleware/asyncHandler');
 const router = express.Router();
 
 // GET /api/dashboard
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const isAdmin = req.user.role === 'admin';
   const { projectId, startDate, endDate } = req.query;
@@ -413,6 +414,6 @@ router.get('/', authMiddleware, async (req, res) => {
     projects, myTasks, myOpenTasks, activity, burndown, stats, statusCounts, totalTickets, priorityCounts, typeCounts, hourStats,
     workloadStats, accuracyStats, agingTasks, projectBurndown, projectHealth
   });
-});
+}));
 
 module.exports = router;

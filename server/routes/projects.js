@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
@@ -21,7 +22,7 @@ function makeKeyPrefix(name) {
 }
 
 // GET /api/projects
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, asyncHandler(async (req, res) => {
   let projects;
   if (req.user.role === 'admin') {
     projects = await db.prepare(`
@@ -41,47 +42,38 @@ router.get('/', authMiddleware, async (req, res) => {
     `).all(req.user.id);
   }
   res.json(projects);
-});
+}));
 
 // POST /api/projects
-router.post('/', authMiddleware, adminOnly, async (req, res) => {
-  try {
-    const { name, description, memberIds, estimated_completion_date, project_goal, owner_id } = req.body;
-    if (!name) return res.status(400).json({ error: 'Project name is required' });
+router.post('/', authMiddleware, adminOnly, asyncHandler(async (req, res) => {
+  const { name, description, memberIds, estimated_completion_date, project_goal, owner_id } = req.body;
+  if (!name) return res.status(400).json({ error: 'Project name is required' });
 
-    // Use the provided owner_id (assigned lead) or default to the admin creator
-    const ownerId = owner_id || req.user.id;
-    const keyPrefix = makeKeyPrefix(name);
+  // Use the provided owner_id (assigned lead) or default to the admin creator
+  const ownerId = owner_id || req.user.id;
+  const keyPrefix = makeKeyPrefix(name);
 
-    const result = await db.prepare(
-      'INSERT INTO projects (name, key_prefix, description, owner_id, creator_id, estimated_completion_date, project_goal) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(name, keyPrefix, description || '', ownerId, req.user.id, estimated_completion_date || null, project_goal || null);
+  const result = await db.prepare(
+    'INSERT INTO projects (name, key_prefix, description, owner_id, creator_id, estimated_completion_date, project_goal) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(name, keyPrefix, description || '', ownerId, req.user.id, estimated_completion_date || null, project_goal || null);
 
-    const projectId = result.lastInsertRowid;
-    
-    // Ensure the owner is a member
-    await db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING').run(projectId, ownerId);
+  const projectId = result.lastInsertRowid;
+  
+  // Ensure the owner is a member
+  await db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING').run(projectId, ownerId);
 
-    if (Array.isArray(memberIds)) {
-      for (const uid of memberIds) {
-        if (uid !== ownerId) {
-          await db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING').run(projectId, uid);
-        }
+  if (Array.isArray(memberIds)) {
+    for (const uid of memberIds) {
+      if (uid !== ownerId) {
+        await db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING').run(projectId, uid);
       }
     }
-    res.status(201).json({ id: projectId, name, key_prefix: keyPrefix, description, owner_id: ownerId, creator_id: req.user.id });
-  } catch (error) {
-    console.error('Project creation failed:', error);
-    res.status(500).json({ 
-      error: 'Project creation failed', 
-      message: error.message,
-      stack: error.stack
-    });
   }
-});
+  res.status(201).json({ id: projectId, name, key_prefix: keyPrefix, description, owner_id: ownerId, creator_id: req.user.id });
+}));
 
 // GET /api/projects/all-directory
-router.get('/all-directory', authMiddleware, async (req, res) => {
+router.get('/all-directory', authMiddleware, asyncHandler(async (req, res) => {
   const projects = await db.prepare(`
     SELECT p.*, u.name as owner_name,
       EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?) as is_member,
@@ -91,10 +83,10 @@ router.get('/all-directory', authMiddleware, async (req, res) => {
     ORDER BY p.name ASC
   `).all(req.user.id, req.user.id);
   res.json(projects);
-});
+}));
 
 // GET /api/projects/requests/pending
-router.get('/requests/pending', authMiddleware, async (req, res) => {
+router.get('/requests/pending', authMiddleware, asyncHandler(async (req, res) => {
   if (req.user.role !== 'admin' && req.user.role !== 'lead') {
     return res.status(403).json({ error: 'Admin or Lead access required' });
   }
@@ -121,10 +113,10 @@ router.get('/requests/pending', authMiddleware, async (req, res) => {
     `).all(req.user.id);
   }
   res.json(requests);
-});
+}));
 
 // PUT /api/projects/requests/:id/:action
-router.put('/requests/:id/:action', authMiddleware, async (req, res) => {
+router.put('/requests/:id/:action', authMiddleware, asyncHandler(async (req, res) => {
   const { id, action } = req.params;
   const reqRow = await db.prepare(`
     SELECT pr.*, p.owner_id 
@@ -147,20 +139,20 @@ router.put('/requests/:id/:action', authMiddleware, async (req, res) => {
     await db.prepare("UPDATE project_requests SET status = 'rejected' WHERE id = ?").run(id);
   }
   res.json({ success: true });
-});
+}));
 
 // POST /api/projects/:id/requests
-router.post('/:id/requests', authMiddleware, async (req, res) => {
+router.post('/:id/requests', authMiddleware, asyncHandler(async (req, res) => {
   await db.prepare(`
     INSERT INTO project_requests (project_id, user_id, status)
     VALUES (?, ?, 'pending')
     ON CONFLICT(project_id, user_id) DO UPDATE SET status = 'pending'
   `).run(req.params.id, req.user.id);
   res.json({ success: true });
-});
+}));
 
 // GET /api/projects/:id
-router.get('/:id', authMiddleware, async (req, res) => {
+router.get('/:id', authMiddleware, asyncHandler(async (req, res) => {
   const project = await db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
   if (req.user.role !== 'admin' && !(await isMember(req.params.id, req.user.id))) {
@@ -171,10 +163,10 @@ router.get('/:id', authMiddleware, async (req, res) => {
     INNER JOIN project_members pm ON pm.user_id = u.id WHERE pm.project_id = ?
   `).all(req.params.id);
   res.json({ ...project, members });
-});
+}));
 
 // PATCH /api/projects/:id
-router.patch('/:id', authMiddleware, async (req, res) => {
+router.patch('/:id', authMiddleware, asyncHandler(async (req, res) => {
   const projectId = Number(req.params.id);
   const project = await db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
   if (!project) return res.status(404).json({ error: 'Project not found' });
@@ -210,16 +202,16 @@ router.patch('/:id', authMiddleware, async (req, res) => {
   
   const updatedProject = await db.prepare('SELECT p.*, u.name as owner_name FROM projects p LEFT JOIN users u ON u.id = p.owner_id WHERE p.id = ?').get(projectId);
   res.json(updatedProject);
-});
+}));
 
 // DELETE /api/projects/:id
-router.delete('/:id', authMiddleware, adminOnly, async (req, res) => {
+router.delete('/:id', authMiddleware, adminOnly, asyncHandler(async (req, res) => {
   await db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
   res.json({ success: true });
-});
+}));
 
 // POST /api/projects/:id/members
-router.post('/:id/members', authMiddleware, async (req, res) => {
+router.post('/:id/members', authMiddleware, asyncHandler(async (req, res) => {
   const project = await db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
@@ -239,10 +231,10 @@ router.post('/:id/members', authMiddleware, async (req, res) => {
   }
 
   res.json({ success: true });
-});
+}));
 
 // DELETE /api/projects/:id/members/:userId
-router.delete('/:id/members/:userId', authMiddleware, async (req, res) => {
+router.delete('/:id/members/:userId', authMiddleware, asyncHandler(async (req, res) => {
   const { id, userId } = req.params;
   const project = await db.prepare('SELECT owner_id, creator_id FROM projects WHERE id = ?').get(id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
@@ -278,6 +270,6 @@ router.delete('/:id/members/:userId', authMiddleware, async (req, res) => {
 
   await db.prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').run(id, userId);
   res.json({ success: true });
-});
+}));
 
 module.exports = router;

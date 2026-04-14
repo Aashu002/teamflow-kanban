@@ -53,6 +53,15 @@ app.use('/api/search', require('./routes/search'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
+// Global Error Handler
+app.use((err, req, res, next) => {
+  console.error('🔥 Global Error:', err.stack);
+  res.status(err.status || 500).json({
+    error: err.message || 'An unexpected error occurred',
+    details: process.env.NODE_ENV === 'production' ? null : err.stack
+  });
+});
+
 // ─── PRODUCTION ──────────────────────────────────────────────────────────────
 if (isProd) {
   const distPath = path.join(__dirname, '../client/dist');
