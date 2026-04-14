@@ -64,7 +64,7 @@ router.post('/', authMiddleware, adminOrLead, asyncHandler(async (req, res) => {
   if (projectId) {
     const proj = await db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId);
     if (proj && (req.user.role === 'admin' || proj.owner_id === req.user.id)) {
-      await db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING').run(projectId, userId);
+      await db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT (project_id, user_id) DO NOTHING').run(projectId, userId);
     }
   }
 

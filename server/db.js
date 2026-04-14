@@ -63,16 +63,18 @@ const db = {
         }
       },
       run: async (...params) => {
-        // We append RETURNING id if it's an INSERT to mock lastInsertRowid
+        // We append RETURNING * if it's an INSERT to mock lastInsertRowid.
+        // Using RETURNING * (not RETURNING id) so tables with composite PKs
+        // (like project_members) don't throw "column id does not exist".
         let finalSql = pgSql;
         if (pgSql.trim().toUpperCase().startsWith('INSERT') && !pgSql.toUpperCase().includes('RETURNING')) {
-          finalSql += ' RETURNING id';
+          finalSql += ' RETURNING *';
         }
         
         try {
           const res = await pool.query(finalSql, params);
           return { 
-            lastInsertRowid: res.rows[0]?.id || null, 
+            lastInsertRowid: res.rows[0]?.id ?? null, 
             changes: res.rowCount 
           };
         } catch (err) {
