@@ -196,11 +196,62 @@ export default function AnalyticsPage() {
     <div className="page-layout" style={{ background: 'var(--bg-document)' }}>
       <style>{`
         .recharts-sector { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        .filter-select { background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--text-primary); padding: 8px 12px; borderRadius: 8px; fontSize: 13px; fontWeight: 500; cursor: pointer; outline: none; transition: border-color 0.2s; }
-        .filter-select:hover { border-color: var(--accent-purple); }
-        .date-input { background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--text-primary); padding: 7px 10px; borderRadius: 6px; fontSize: 13px; outline: none; }
-        .apply-btn { background: var(--accent-purple); color: white; border: none; padding: 8px 16px; borderRadius: 6px; fontSize: 13px; fontWeight: 600; cursor: pointer; transition: opacity 0.2s; }
-        .apply-btn:hover { opacity: 0.9; }
+        .filter-select { 
+          background: var(--bg-surface); 
+          border: 1px solid var(--border-color); 
+          color: var(--text-primary); 
+          padding: 10px 20px; 
+          border-radius: 10px; 
+          font-size: 13px; 
+          font-weight: 600; 
+          cursor: pointer; 
+          outline: none; 
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+          appearance: none;
+          background-image: url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6 9L12 15L18 9' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+          background-repeat: no-repeat;
+          background-position: right 14px center;
+          padding-right: 36px;
+        }
+        .filter-select:hover { 
+          border-color: var(--accent-purple); 
+          box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
+          transform: translateY(-1px);
+        }
+        .date-input { 
+          background: var(--bg-surface); 
+          border: 1px solid var(--border-color); 
+          color: var(--text-primary); 
+          padding: 8px 16px; 
+          border-radius: 10px; 
+          font-size: 13px; 
+          outline: none;
+          transition: border-color 0.2s;
+        }
+        .date-input:focus {
+          border-color: var(--accent-purple);
+        }
+        .apply-btn { 
+          background: var(--accent-grad); 
+          color: white; 
+          border: none; 
+          padding: 10px 28px; 
+          border-radius: 10px; 
+          font-size: 14px; 
+          font-weight: 700; 
+          cursor: pointer; 
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+        }
+        .apply-btn:hover { 
+          transform: translateY(-2px) scale(1.02);
+          box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+          filter: brightness(1.1);
+        }
+        .apply-btn:active {
+          transform: translateY(0) scale(0.98);
+        }
       `}</style>
       <div className="page-content" style={{ maxWidth: 1200, margin: '20px auto', padding: '0 20px', paddingBottom: 60 }}>
         
@@ -229,7 +280,7 @@ export default function AnalyticsPage() {
                 </select>
 
                 {dateRangeType === 'custom' && (
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'var(--bg-panel)', padding: '4px 8px', borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', background: 'var(--bg-panel)', padding: '6px 12px', borderRadius: 14, border: '1px solid var(--border-color)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)' }}>
                     <input type="date" className="date-input" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
                     <span style={{ color: 'var(--text-muted)' }}>-</span>
                     <input type="date" className="date-input" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
