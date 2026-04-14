@@ -22,14 +22,15 @@ const VALID_STATUSES = ['backlog','open','gathering','inprogress','qa_testing','
 const VALID_PRIORITIES = ['low','medium','high'];
 const VALID_TYPES = ['epic','story','task','subtask','bug'];
 
-function isMember(projectId, userId, role) {
+async function isMember(projectId, userId, role) {
   if (role === 'admin') return true;
-  return db.prepare('SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?').get(projectId, userId);
+  const project_id = parseInt(projectId);
+  return await db.prepare('SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?').get(project_id, userId);
 }
 
 // Full task select query helper
-function selectTask(id) {
-  return db.prepare(`
+async function selectTask(id) {
+  return await db.prepare(`
     SELECT t.*,
       (SELECT SUM(hours) FROM hour_logs WHERE task_id = t.id) as totalHoursLogged,
       p.key_prefix, p.owner_id as project_owner_id,
@@ -48,41 +49,41 @@ function selectTask(id) {
 }
 
 // GET /api/tasks/by-key/:projectId/:taskNumber  — lookup by human key e.g. TF-3
-router.get('/by-key/:projectId/:taskNumber', authMiddleware, (req, res) => {
+router.get('/by-key/:projectId/:taskNumber', authMiddleware, async (req, res) => {
   const { projectId, taskNumber } = req.params;
-  if (!isMember(projectId, req.user.id, req.user.role)) return res.status(403).json({ error: 'Not a member' });
+  if (!(await isMember(projectId, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
 
-  const row = db.prepare(
+  const row = await db.prepare(
     'SELECT id FROM tasks WHERE project_id = ? AND task_number = ?'
   ).get(projectId, parseInt(taskNumber, 10));
 
   if (!row) return res.status(404).json({ error: 'Task not found' });
 
-  const task = selectTask(row.id);
-  const subtasks = db.prepare(`
+  const task = await selectTask(row.id);
+  const subtasks = await db.prepare(`
     SELECT t.*, p.key_prefix, assignee.name as assignee_name, assignee.avatar_color as assignee_color
     FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
     LEFT JOIN users assignee ON assignee.id = t.assignee_id
     WHERE t.parent_id = ?
   `).all(row.id);
-  const comments = db.prepare(`
+  const comments = await db.prepare(`
     SELECT c.*, u.name as user_name, u.avatar_color as user_color
     FROM comments c LEFT JOIN users u ON u.id = c.user_id
     WHERE c.task_id = ? ORDER BY c.created_at ASC
   `).all(row.id);
-  const attachments = db.prepare(`
+  const attachments = await db.prepare(`
     SELECT a.*, u.name as user_name
     FROM attachments a LEFT JOIN users u ON u.id = a.user_id
     WHERE a.task_id = ? ORDER BY a.created_at ASC
   `).all(row.id);
-  const hourLogs = db.prepare(`
+  const hourLogs = await db.prepare(`
     SELECT h.*, u.name as user_name, u.avatar_color as user_color
     FROM hour_logs h LEFT JOIN users u ON u.id = h.user_id
     WHERE h.task_id = ? ORDER BY h.logged_at DESC
   `).all(row.id);
   const totalHoursLogged = hourLogs.reduce((s, l) => s + l.hours, 0);
 
-  const rawLinks = db.prepare(`
+  const rawLinks = await db.prepare(`
     SELECT tl.*,
       t1.title as task_title, t1.task_number as task_number, p1.key_prefix as task_key_prefix, t1.status as task_status, t1.task_type as task_type,
       t2.title as linked_task_title, t2.task_number as linked_task_number, p2.key_prefix as linked_key_prefix, t2.status as linked_status, t2.task_type as linked_type
@@ -113,7 +114,7 @@ router.get('/by-key/:projectId/:taskNumber', authMiddleware, (req, res) => {
 });
 
 // GET /api/tasks/search
-router.get('/search', authMiddleware, (req, res) => {
+router.get('/search', authMiddleware, async (req, res) => {
   const { creator, search } = req.query;
   const conditions = [];
   const params = [];
@@ -129,7 +130,7 @@ router.get('/search', authMiddleware, (req, res) => {
   }
 
   if (search) {
-    conditions.push('(t.title LIKE ? OR t.description LIKE ? OR t.task_number LIKE ?)');
+    conditions.push('(t.title ILIKE ? OR t.description ILIKE ? OR CAST(t.task_number AS TEXT) LIKE ?)');
     const likeParam = `%${search}%`;
     params.push(likeParam, likeParam, likeParam);
   }
@@ -158,7 +159,7 @@ router.get('/search', authMiddleware, (req, res) => {
 
   const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  const tasks = db.prepare(`
+  const tasks = await db.prepare(`
     SELECT t.*, p.key_prefix, p.name as project_name,
       creator.name as creator_name, creator.avatar_color as creator_color,
       assignee.name as assignee_name, assignee.avatar_color as assignee_color
@@ -175,12 +176,12 @@ router.get('/search', authMiddleware, (req, res) => {
 });
 
 // GET /api/tasks?projectId=X
-router.get('/', authMiddleware, (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
   const { projectId } = req.query;
   if (!projectId) return res.status(400).json({ error: 'projectId required' });
-  if (!isMember(projectId, req.user.id, req.user.role)) return res.status(403).json({ error: 'Not a member' });
+  if (!(await isMember(projectId, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
 
-  const tasks = db.prepare(`
+  const tasks = await db.prepare(`
     SELECT t.*, p.key_prefix,
       creator.name as creator_name, creator.avatar_color as creator_color,
       assignee.name as assignee_name, assignee.avatar_color as assignee_color
@@ -195,33 +196,33 @@ router.get('/', authMiddleware, (req, res) => {
 });
 
 // GET /api/tasks/:id — full task detail
-router.get('/:id', authMiddleware, (req, res) => {
-  const task = selectTask(req.params.id);
+router.get('/:id', authMiddleware, async (req, res) => {
+  const task = await selectTask(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
-  if (!isMember(task.project_id, req.user.id, req.user.role)) return res.status(403).json({ error: 'Not a member' });
+  if (!(await isMember(task.project_id, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
 
   // Subtasks
-  const subtasks = db.prepare(`
+  const subtasks = await db.prepare(`
     SELECT t.*, p.key_prefix, assignee.name as assignee_name, assignee.avatar_color as assignee_color
     FROM tasks t LEFT JOIN projects p ON p.id = t.project_id LEFT JOIN users assignee ON assignee.id = t.assignee_id
     WHERE t.parent_id = ?
   `).all(req.params.id);
 
   // Comments
-  const comments = db.prepare(`
+  const comments = await db.prepare(`
     SELECT c.*, u.name as user_name, u.avatar_color as user_color
     FROM comments c LEFT JOIN users u ON u.id = c.user_id
     WHERE c.task_id = ? ORDER BY c.created_at ASC
   `).all(req.params.id);
 
   // Attachments
-  const attachments = db.prepare(`
+  const attachments = await db.prepare(`
     SELECT a.*, u.name as user_name
     FROM attachments a LEFT JOIN users u ON u.id = a.user_id
     WHERE a.task_id = ? ORDER BY a.created_at ASC
   `).all(req.params.id);
 
-  const hourLogs = db.prepare(`
+  const hourLogs = await db.prepare(`
     SELECT h.*, u.name as user_name, u.avatar_color as user_color
     FROM hour_logs h LEFT JOIN users u ON u.id = h.user_id
     WHERE h.task_id = ? ORDER BY h.logged_at DESC
@@ -232,25 +233,26 @@ router.get('/:id', authMiddleware, (req, res) => {
 });
 
 // POST /api/tasks
-router.post('/', authMiddleware, (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
   const { title, description, status, priority, task_type, projectId, assigneeId, parentId } = req.body;
   if (!title || !projectId) return res.status(400).json({ error: 'Title and projectId required' });
-  if (!isMember(projectId, req.user.id, req.user.role)) return res.status(403).json({ error: 'Not a member' });
+  if (!(await isMember(projectId, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
 
   // Atomically get next task number for this project
-  db.prepare('UPDATE projects SET task_counter = task_counter + 1 WHERE id = ?').run(projectId);
-  const { task_counter } = db.prepare('SELECT task_counter FROM projects WHERE id = ?').get(projectId);
+  await db.prepare('UPDATE projects SET task_counter = task_counter + 1 WHERE id = ?').run(projectId);
+  const row = await db.prepare('SELECT task_counter FROM projects WHERE id = ?').get(projectId);
+  const task_counter = row.task_counter;
 
   const s = VALID_STATUSES.includes(status) ? status : 'backlog';
   const p = VALID_PRIORITIES.includes(priority) ? priority : 'medium';
   const t = VALID_TYPES.includes(task_type) ? task_type : 'task';
 
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO tasks (task_number, task_type, title, description, status, priority, project_id, creator_id, assignee_id, parent_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(task_counter, t, title, description || '', s, p, projectId, req.user.id, assigneeId || null, parentId || null);
 
-  const task = selectTask(result.lastInsertRowid);
+  const task = await selectTask(result.lastInsertRowid);
   
   if (req.app.get('io')) {
     req.app.get('io').to(`project_${projectId}`).emit('task_created', task);
@@ -260,17 +262,17 @@ router.post('/', authMiddleware, (req, res) => {
 });
 
 // PATCH /api/tasks/:id
-router.patch('/:id', authMiddleware, (req, res) => {
-  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+router.patch('/:id', authMiddleware, async (req, res) => {
+  const task = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
-  if (!isMember(task.project_id, req.user.id, req.user.role)) return res.status(403).json({ error: 'Not a member' });
+  if (!(await isMember(task.project_id, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
 
   const { title, description, status, priority, task_type, assigneeId, parentId, estimated_completion, hours_estimated } = req.body;
   const s = VALID_STATUSES.includes(status) ? status : task.status;
   const p = VALID_PRIORITIES.includes(priority) ? priority : task.priority;
   const t = VALID_TYPES.includes(task_type) ? task_type : task.task_type;
 
-  db.prepare(`
+  await db.prepare(`
     UPDATE tasks SET title=?, description=?, status=?, priority=?, task_type=?,
       assignee_id=?, parent_id=?, estimated_completion=?, hours_estimated=?,
       updated_at=CURRENT_TIMESTAMP WHERE id=?
@@ -285,7 +287,7 @@ router.patch('/:id', authMiddleware, (req, res) => {
     req.params.id
   );
 
-  const updatedTask = selectTask(req.params.id);
+  const updatedTask = await selectTask(req.params.id);
   
   if (req.app.get('io')) {
     req.app.get('io').to(`project_${updatedTask.project_id}`).emit('task_updated', updatedTask);
@@ -295,12 +297,12 @@ router.patch('/:id', authMiddleware, (req, res) => {
 });
 
 // POST /api/tasks/:id/move — Transfer task to a different project or change key details
-router.post('/:id/move', authMiddleware, (req, res) => {
-  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+router.post('/:id/move', authMiddleware, async (req, res) => {
+  const task = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
   
   // Member of current project?
-  if (!isMember(task.project_id, req.user.id, req.user.role)) {
+  if (!(await isMember(task.project_id, req.user.id, req.user.role))) {
     return res.status(403).json({ error: 'Not a member of current project' });
   }
 
@@ -308,7 +310,7 @@ router.post('/:id/move', authMiddleware, (req, res) => {
   if (!targetProjectId) return res.status(400).json({ error: 'targetProjectId required' });
 
   // Member of target project?
-  if (!isMember(targetProjectId, req.user.id, req.user.role)) {
+  if (!(await isMember(targetProjectId, req.user.id, req.user.role))) {
     return res.status(403).json({ error: 'Not a member of target project' });
   }
 
@@ -320,18 +322,18 @@ router.post('/:id/move', authMiddleware, (req, res) => {
 
   // If project is changing, we need a new task number
   if (parseInt(targetProjectId) !== task.project_id) {
-    db.prepare('UPDATE projects SET task_counter = task_counter + 1 WHERE id = ?').run(targetProjectId);
-    const projData = db.prepare('SELECT task_counter FROM projects WHERE id = ?').get(targetProjectId);
+    await db.prepare('UPDATE projects SET task_counter = task_counter + 1 WHERE id = ?').run(targetProjectId);
+    const projData = await db.prepare('SELECT task_counter FROM projects WHERE id = ?').get(targetProjectId);
     newProject = parseInt(targetProjectId);
     newTaskNumber = projData.task_counter;
   }
 
-  db.prepare(`
+  await db.prepare(`
     UPDATE tasks SET project_id=?, task_number=?, priority=?, task_type=?, updated_at=CURRENT_TIMESTAMP
     WHERE id=?
   `).run(newProject, newTaskNumber, p, t, req.params.id);
 
-  const updatedTask = selectTask(req.params.id);
+  const updatedTask = await selectTask(req.params.id);
 
   // Notify old project members (deletion) and new project members (creation/update)
   if (req.app.get('io')) {
@@ -347,8 +349,8 @@ router.post('/:id/move', authMiddleware, (req, res) => {
 });
 
 // DELETE /api/tasks/:id
-router.delete('/:id', authMiddleware, (req, res) => {
-  const task = selectTask(req.params.id);
+router.delete('/:id', authMiddleware, async (req, res) => {
+  const task = await selectTask(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
   
   const canDelete = req.user.role === 'admin' 
@@ -358,7 +360,7 @@ router.delete('/:id', authMiddleware, (req, res) => {
   if (!canDelete) {
     return res.status(403).json({ error: 'Only creator, project lead or admin can delete' });
   }
-  db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
+  await db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
   
   if (req.app.get('io')) {
     req.app.get('io').to(`project_${task.project_id}`).emit('task_deleted', { id: task.id, project_id: task.project_id });
@@ -370,20 +372,20 @@ router.delete('/:id', authMiddleware, (req, res) => {
 // ─── Hour Logging ────────────────────────────────────────────────────────────
 
 // POST /api/tasks/:id/log-hours
-router.post('/:id/log-hours', authMiddleware, (req, res) => {
-  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+router.post('/:id/log-hours', authMiddleware, async (req, res) => {
+  const task = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
-  if (!isMember(task.project_id, req.user.id, req.user.role)) return res.status(403).json({ error: 'Not a member' });
+  if (!(await isMember(task.project_id, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
 
   const { hours, note } = req.body;
   const h = parseFloat(hours);
   if (!h || h <= 0) return res.status(400).json({ error: 'Hours must be a positive number' });
 
-  const result = db.prepare(
+  const result = await db.prepare(
     'INSERT INTO hour_logs (task_id, user_id, hours, note) VALUES (?, ?, ?, ?)'
   ).run(req.params.id, req.user.id, h, note?.trim() || '');
 
-  const log = db.prepare(`
+  const log = await db.prepare(`
     SELECT h.*, u.name as user_name, u.avatar_color as user_color
     FROM hour_logs h LEFT JOIN users u ON u.id = h.user_id WHERE h.id = ?
   `).get(result.lastInsertRowid);
@@ -392,23 +394,23 @@ router.post('/:id/log-hours', authMiddleware, (req, res) => {
 });
 
 // DELETE /api/tasks/:id/log-hours/:logId
-router.delete('/:id/log-hours/:logId', authMiddleware, (req, res) => {
-  const log = db.prepare('SELECT * FROM hour_logs WHERE id = ? AND task_id = ?').get(req.params.logId, req.params.id);
+router.delete('/:id/log-hours/:logId', authMiddleware, async (req, res) => {
+  const log = await db.prepare('SELECT * FROM hour_logs WHERE id = ? AND task_id = ?').get(req.params.logId, req.params.id);
   if (!log) return res.status(404).json({ error: 'Log not found' });
   if (log.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Not authorized' });
-  db.prepare('DELETE FROM hour_logs WHERE id = ?').run(req.params.logId);
+  await db.prepare('DELETE FROM hour_logs WHERE id = ?').run(req.params.logId);
   res.json({ success: true });
 });
 
 // ─── Comments ────────────────────────────────────────────────────────────────
 
 // GET /api/tasks/:id/comments
-router.get('/:id/comments', authMiddleware, (req, res) => {
-  const task = db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
+router.get('/:id/comments', authMiddleware, async (req, res) => {
+  const task = await db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
-  if (!isMember(task.project_id, req.user.id, req.user.role)) return res.status(403).json({ error: 'Not a member' });
+  if (!(await isMember(task.project_id, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
 
-  const comments = db.prepare(`
+  const comments = await db.prepare(`
     SELECT c.*, u.name as user_name, u.avatar_color as user_color
     FROM comments c LEFT JOIN users u ON u.id = c.user_id
     WHERE c.task_id = ? ORDER BY c.created_at ASC
@@ -417,19 +419,19 @@ router.get('/:id/comments', authMiddleware, (req, res) => {
 });
 
 // POST /api/tasks/:id/comments
-router.post('/:id/comments', authMiddleware, (req, res) => {
-  const task = db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
+router.post('/:id/comments', authMiddleware, async (req, res) => {
+  const task = await db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
-  if (!isMember(task.project_id, req.user.id, req.user.role)) return res.status(403).json({ error: 'Not a member' });
+  if (!(await isMember(task.project_id, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
 
   const { content } = req.body;
   if (!content?.trim()) return res.status(400).json({ error: 'Comment cannot be empty' });
 
-  const result = db.prepare(
+  const result = await db.prepare(
     'INSERT INTO comments (task_id, user_id, content) VALUES (?, ?, ?)'
   ).run(req.params.id, req.user.id, content.trim());
 
-  const comment = db.prepare(`
+  const comment = await db.prepare(`
     SELECT c.*, u.name as user_name, u.avatar_color as user_color
     FROM comments c LEFT JOIN users u ON u.id = c.user_id WHERE c.id = ?
   `).get(result.lastInsertRowid);
@@ -442,21 +444,21 @@ router.post('/:id/comments', authMiddleware, (req, res) => {
 });
 
 // PATCH /api/tasks/:id/comments/:cid
-router.patch('/:id/comments/:cid', authMiddleware, (req, res) => {
-  const comment = db.prepare('SELECT * FROM comments WHERE id = ? AND task_id = ?').get(req.params.cid, req.params.id);
+router.patch('/:id/comments/:cid', authMiddleware, async (req, res) => {
+  const comment = await db.prepare('SELECT * FROM comments WHERE id = ? AND task_id = ?').get(req.params.cid, req.params.id);
   if (!comment) return res.status(404).json({ error: 'Comment not found' });
   if (comment.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Not authorized' });
   const { content } = req.body;
   if (!content?.trim()) return res.status(400).json({ error: 'Comment cannot be empty' });
-  db.prepare('UPDATE comments SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(content.trim(), req.params.cid);
-  const updated = db.prepare(`
+  await db.prepare('UPDATE comments SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(content.trim(), req.params.cid);
+  const updated = await db.prepare(`
     SELECT c.*, u.name as user_name, u.avatar_color as user_color
     FROM comments c LEFT JOIN users u ON u.id = c.user_id WHERE c.id = ?
   `).get(req.params.cid);
   
   if (req.app.get('io')) {
     // Need project_id, so lookup task
-    const task = db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
+    const task = await db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
     if (task) {
       req.app.get('io').to(`project_${task.project_id}`).emit('comment_updated', updated);
     }
@@ -466,14 +468,14 @@ router.patch('/:id/comments/:cid', authMiddleware, (req, res) => {
 });
 
 // DELETE /api/tasks/:id/comments/:cid
-router.delete('/:id/comments/:cid', authMiddleware, (req, res) => {
-  const comment = db.prepare('SELECT * FROM comments WHERE id = ? AND task_id = ?').get(req.params.cid, req.params.id);
+router.delete('/:id/comments/:cid', authMiddleware, async (req, res) => {
+  const comment = await db.prepare('SELECT * FROM comments WHERE id = ? AND task_id = ?').get(req.params.cid, req.params.id);
   if (!comment) return res.status(404).json({ error: 'Comment not found' });
   if (comment.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Not authorized' });
-  db.prepare('DELETE FROM comments WHERE id = ?').run(req.params.cid);
+  await db.prepare('DELETE FROM comments WHERE id = ?').run(req.params.cid);
   
   if (req.app.get('io')) {
-    const task = db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
+    const task = await db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
     if (task) {
       req.app.get('io').to(`project_${task.project_id}`).emit('comment_deleted', { id: parseInt(req.params.cid), task_id: parseInt(req.params.id) });
     }
@@ -485,25 +487,25 @@ router.delete('/:id/comments/:cid', authMiddleware, (req, res) => {
 // ─── Attachments ──────────────────────────────────────────────────────────────
 
 // POST /api/tasks/:id/attachments
-router.post('/:id/attachments', authMiddleware, upload.single('file'), (req, res) => {
-  const task = db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
+router.post('/:id/attachments', authMiddleware, upload.single('file'), async (req, res) => {
+  const task = await db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
-  if (!isMember(task.project_id, req.user.id, req.user.role)) return res.status(403).json({ error: 'Not a member' });
+  if (!(await isMember(task.project_id, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-  const result = db.prepare(
+  const result = await db.prepare(
     'INSERT INTO attachments (task_id, user_id, filename, original_name, size, mimetype) VALUES (?, ?, ?, ?, ?, ?)'
   ).run(req.params.id, req.user.id, req.file.filename, req.file.originalname, req.file.size, req.file.mimetype);
 
-  const attachment = db.prepare(`
+  const attachment = await db.prepare(`
     SELECT a.*, u.name as user_name FROM attachments a LEFT JOIN users u ON u.id = a.user_id WHERE a.id = ?
   `).get(result.lastInsertRowid);
   res.status(201).json(attachment);
 });
 
 // DELETE /api/tasks/:id/attachments/:aid
-router.delete('/:id/attachments/:aid', authMiddleware, (req, res) => {
-  const att = db.prepare('SELECT * FROM attachments WHERE id = ? AND task_id = ?').get(req.params.aid, req.params.id);
+router.delete('/:id/attachments/:aid', authMiddleware, async (req, res) => {
+  const att = await db.prepare('SELECT * FROM attachments WHERE id = ? AND task_id = ?').get(req.params.aid, req.params.id);
   if (!att) return res.status(404).json({ error: 'Attachment not found' });
   if (att.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Not authorized' });
 
@@ -511,27 +513,27 @@ router.delete('/:id/attachments/:aid', authMiddleware, (req, res) => {
   const filePath = path.join(__dirname, '../uploads', att.filename);
   try { fs.unlinkSync(filePath); } catch {}
 
-  db.prepare('DELETE FROM attachments WHERE id = ?').run(req.params.aid);
+  await db.prepare('DELETE FROM attachments WHERE id = ?').run(req.params.aid);
   res.json({ success: true });
 });
 // ─── Links ────────────────────────────────────────────────────────────────────
 
 // POST /api/tasks/:id/links
-router.post('/:id/links', authMiddleware, (req, res) => {
+router.post('/:id/links', authMiddleware, async (req, res) => {
   const { linkedTaskId, linkType } = req.body;
   if (!linkedTaskId || !linkType) return res.status(400).json({ error: 'Missing properties' });
   
-  const task = db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
+  const task = await db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
   if (!task) return res.status(404).json({ error: 'Source task not found' });
-  if (!isMember(task.project_id, req.user.id, req.user.role)) return res.status(403).json({ error: 'Not authorized' });
+  if (!(await isMember(task.project_id, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not authorized' });
 
   try {
-    const result = db.prepare(
+    const result = await db.prepare(
       'INSERT INTO task_links (task_id, linked_task_id, link_type) VALUES (?, ?, ?)'
     ).run(req.params.id, linkedTaskId, linkType);
     
     // Fetch newly created link data formatted to match GET response
-    const l = db.prepare(`
+    const l = await db.prepare(`
       SELECT tl.*,
         t1.title as task_title, t1.task_number as task_number, p1.key_prefix as task_key_prefix, t1.status as task_status, t1.task_type as task_type,
         t2.title as linked_task_title, t2.task_number as linked_task_number, p2.key_prefix as linked_key_prefix, t2.status as linked_status, t2.task_type as linked_type
@@ -557,7 +559,7 @@ router.post('/:id/links', authMiddleware, (req, res) => {
 
     res.status(201).json(linkData);
   } catch (err) {
-    if (err.message.includes('UNIQUE')) {
+    if (err.message.includes('UNIQUE') || err.code === '23505') {
       return res.status(409).json({ error: 'Link already exists' });
     }
     console.error(err);
@@ -566,14 +568,14 @@ router.post('/:id/links', authMiddleware, (req, res) => {
 });
 
 // DELETE /api/tasks/:id/links/:linkId
-router.delete('/:id/links/:linkId', authMiddleware, (req, res) => {
-  const link = db.prepare('SELECT * FROM task_links WHERE id = ? AND (task_id = ? OR linked_task_id = ?)').get(req.params.linkId, req.params.id, req.params.id);
+router.delete('/:id/links/:linkId', authMiddleware, async (req, res) => {
+  const link = await db.prepare('SELECT * FROM task_links WHERE id = ? AND (task_id = ? OR linked_task_id = ?)').get(req.params.linkId, req.params.id, req.params.id);
   if (!link) return res.status(404).json({ error: 'Link not found' });
   
-  const task = db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
-  if (!isMember(task.project_id, req.user.id, req.user.role)) return res.status(403).json({ error: 'Not authorized' });
+  const task = await db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id);
+  if (!(await isMember(task.project_id, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not authorized' });
 
-  db.prepare('DELETE FROM task_links WHERE id = ?').run(req.params.linkId);
+  await db.prepare('DELETE FROM task_links WHERE id = ?').run(req.params.linkId);
   res.json({ success: true });
 });
 

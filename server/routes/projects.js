@@ -9,9 +9,9 @@ function adminOnly(req, res, next) {
   next();
 }
 
-function isMember(projectId, userId, role) {
+async function isMember(projectId, userId, role) {
   if (role === 'admin') return true;
-  return db.prepare('SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?').get(projectId, userId);
+  return await db.prepare('SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?').get(projectId, userId);
 }
 
 // Generate a key prefix from project name (first 2-4 uppercase alpha chars)
@@ -21,17 +21,17 @@ function makeKeyPrefix(name) {
 }
 
 // GET /api/projects
-router.get('/', authMiddleware, (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
   let projects;
   if (req.user.role === 'admin') {
-    projects = db.prepare(`
+    projects = await db.prepare(`
       SELECT p.*, u.name as owner_name,
         (SELECT COUNT(*) FROM project_members pm WHERE pm.project_id = p.id) as member_count,
         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) as task_count
       FROM projects p LEFT JOIN users u ON u.id = p.owner_id ORDER BY p.created_at DESC
     `).all();
   } else {
-    projects = db.prepare(`
+    projects = await db.prepare(`
       SELECT p.*, u.name as owner_name,
         (SELECT COUNT(*) FROM project_members pm WHERE pm.project_id = p.id) as member_count,
         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) as task_count
@@ -44,7 +44,7 @@ router.get('/', authMiddleware, (req, res) => {
 });
 
 // POST /api/projects
-router.post('/', authMiddleware, adminOnly, (req, res) => {
+router.post('/', authMiddleware, adminOnly, async (req, res) => {
   try {
     const { name, description, memberIds, estimated_completion_date, project_goal, owner_id } = req.body;
     if (!name) return res.status(400).json({ error: 'Project name is required' });
@@ -53,19 +53,19 @@ router.post('/', authMiddleware, adminOnly, (req, res) => {
     const ownerId = owner_id || req.user.id;
     const keyPrefix = makeKeyPrefix(name);
 
-    const result = db.prepare(
+    const result = await db.prepare(
       'INSERT INTO projects (name, key_prefix, description, owner_id, creator_id, estimated_completion_date, project_goal) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).run(name, keyPrefix, description || '', ownerId, req.user.id, estimated_completion_date || null, project_goal || null);
 
     const projectId = result.lastInsertRowid;
     
     // Ensure the owner is a member
-    db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)').run(projectId, ownerId);
+    await db.prepare('INSERT INTO project_members (project_id, user_id) ON CONFLICT DO NOTHING VALUES (?, ?)').run(projectId, ownerId);
 
     if (Array.isArray(memberIds)) {
       for (const uid of memberIds) {
         if (uid !== ownerId) {
-          db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)').run(projectId, uid);
+          await db.prepare('INSERT INTO project_members (project_id, user_id) ON CONFLICT DO NOTHING VALUES (?, ?)').run(projectId, uid);
         }
       }
     }
@@ -81,8 +81,8 @@ router.post('/', authMiddleware, adminOnly, (req, res) => {
 });
 
 // GET /api/projects/all-directory
-router.get('/all-directory', authMiddleware, (req, res) => {
-  const projects = db.prepare(`
+router.get('/all-directory', authMiddleware, async (req, res) => {
+  const projects = await db.prepare(`
     SELECT p.*, u.name as owner_name,
       EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?) as is_member,
       (SELECT status FROM project_requests pr WHERE pr.project_id = p.id AND pr.user_id = ?) as request_status
@@ -94,14 +94,14 @@ router.get('/all-directory', authMiddleware, (req, res) => {
 });
 
 // GET /api/projects/requests/pending
-router.get('/requests/pending', authMiddleware, (req, res) => {
+router.get('/requests/pending', authMiddleware, async (req, res) => {
   if (req.user.role !== 'admin' && req.user.role !== 'lead') {
     return res.status(403).json({ error: 'Admin or Lead access required' });
   }
 
   let requests;
   if (req.user.role === 'admin') {
-    requests = db.prepare(`
+    requests = await db.prepare(`
       SELECT pr.*, p.name as project_name, u.name as user_name, u.email as user_email
       FROM project_requests pr
       JOIN projects p ON p.id = pr.project_id
@@ -111,7 +111,7 @@ router.get('/requests/pending', authMiddleware, (req, res) => {
     `).all();
   } else {
     // Lead only sees requests for projects they own
-    requests = db.prepare(`
+    requests = await db.prepare(`
       SELECT pr.*, p.name as project_name, u.name as user_name, u.email as user_email
       FROM project_requests pr
       JOIN projects p ON p.id = pr.project_id
@@ -124,9 +124,9 @@ router.get('/requests/pending', authMiddleware, (req, res) => {
 });
 
 // PUT /api/projects/requests/:id/:action
-router.put('/requests/:id/:action', authMiddleware, (req, res) => {
+router.put('/requests/:id/:action', authMiddleware, async (req, res) => {
   const { id, action } = req.params;
-  const reqRow = db.prepare(`
+  const reqRow = await db.prepare(`
     SELECT pr.*, p.owner_id 
     FROM project_requests pr 
     JOIN projects p ON p.id = pr.project_id 
@@ -141,17 +141,17 @@ router.put('/requests/:id/:action', authMiddleware, (req, res) => {
   }
 
   if (action === 'approve') {
-    db.prepare("UPDATE project_requests SET status = 'approved' WHERE id = ?").run(id);
-    db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)').run(reqRow.project_id, reqRow.user_id);
+    await db.prepare("UPDATE project_requests SET status = 'approved' WHERE id = ?").run(id);
+    await db.prepare('INSERT INTO project_members (project_id, user_id) ON CONFLICT DO NOTHING VALUES (?, ?)').run(reqRow.project_id, reqRow.user_id);
   } else if (action === 'reject') {
-    db.prepare("UPDATE project_requests SET status = 'rejected' WHERE id = ?").run(id);
+    await db.prepare("UPDATE project_requests SET status = 'rejected' WHERE id = ?").run(id);
   }
   res.json({ success: true });
 });
 
 // POST /api/projects/:id/requests
-router.post('/:id/requests', authMiddleware, (req, res) => {
-  db.prepare(`
+router.post('/:id/requests', authMiddleware, async (req, res) => {
+  await db.prepare(`
     INSERT INTO project_requests (project_id, user_id, status)
     VALUES (?, ?, 'pending')
     ON CONFLICT(project_id, user_id) DO UPDATE SET status = 'pending'
@@ -160,13 +160,13 @@ router.post('/:id/requests', authMiddleware, (req, res) => {
 });
 
 // GET /api/projects/:id
-router.get('/:id', authMiddleware, (req, res) => {
-  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+router.get('/:id', authMiddleware, async (req, res) => {
+  const project = await db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  if (req.user.role !== 'admin' && !isMember(req.params.id, req.user.id)) {
+  if (req.user.role !== 'admin' && !(await isMember(req.params.id, req.user.id))) {
     return res.status(403).json({ error: 'Not a member of this project' });
   }
-  const members = db.prepare(`
+  const members = await db.prepare(`
     SELECT u.id, u.name, u.email, u.avatar_color, u.role FROM users u
     INNER JOIN project_members pm ON pm.user_id = u.id WHERE pm.project_id = ?
   `).all(req.params.id);
@@ -174,9 +174,9 @@ router.get('/:id', authMiddleware, (req, res) => {
 });
 
 // PATCH /api/projects/:id
-router.patch('/:id', authMiddleware, (req, res) => {
+router.patch('/:id', authMiddleware, async (req, res) => {
   const projectId = Number(req.params.id);
-  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
+  const project = await db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
   if (!project) return res.status(404).json({ error: 'Project not found' });
   
   if (req.user.role !== 'admin' && project.owner_id !== req.user.id) {
@@ -202,28 +202,25 @@ router.patch('/:id', authMiddleware, (req, res) => {
     params.push(projectId);
     const sql = `UPDATE projects SET ${updates.join(', ')} WHERE id = ?`;
     
-    const transaction = db.transaction(() => {
-      db.prepare(sql).run(...params);
-      if (owner_id !== undefined && owner_id !== null) {
-        db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)').run(projectId, Number(owner_id));
-      }
-    });
-    transaction();
+    await db.prepare(sql).run(...params);
+    if (owner_id !== undefined && owner_id !== null) {
+      await db.prepare('INSERT INTO project_members (project_id, user_id) ON CONFLICT DO NOTHING VALUES (?, ?)').run(projectId, Number(owner_id));
+    }
   }
   
-  const updatedProject = db.prepare('SELECT p.*, u.name as owner_name FROM projects p LEFT JOIN users u ON u.id = p.owner_id WHERE p.id = ?').get(projectId);
+  const updatedProject = await db.prepare('SELECT p.*, u.name as owner_name FROM projects p LEFT JOIN users u ON u.id = p.owner_id WHERE p.id = ?').get(projectId);
   res.json(updatedProject);
 });
 
 // DELETE /api/projects/:id
-router.delete('/:id', authMiddleware, adminOnly, (req, res) => {
-  db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
+router.delete('/:id', authMiddleware, adminOnly, async (req, res) => {
+  await db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
   res.json({ success: true });
 });
 
 // POST /api/projects/:id/members
-router.post('/:id/members', authMiddleware, (req, res) => {
-  const project = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(req.params.id);
+router.post('/:id/members', authMiddleware, async (req, res) => {
+  const project = await db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
   if (req.user.role !== 'admin' && project.owner_id !== req.user.id) {
@@ -231,23 +228,23 @@ router.post('/:id/members', authMiddleware, (req, res) => {
   }
 
   const { userId, userIds } = req.body;
-  const stmt = db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)');
+  const stmt = db.prepare('INSERT INTO project_members (project_id, user_id) ON CONFLICT DO NOTHING VALUES (?, ?)');
 
   if (Array.isArray(userIds)) {
     for (const uid of userIds) {
-      stmt.run(req.params.id, uid);
+      await stmt.run(req.params.id, uid);
     }
   } else if (userId) {
-    stmt.run(req.params.id, userId);
+    await stmt.run(req.params.id, userId);
   }
 
   res.json({ success: true });
 });
 
 // DELETE /api/projects/:id/members/:userId
-router.delete('/:id/members/:userId', authMiddleware, (req, res) => {
+router.delete('/:id/members/:userId', authMiddleware, async (req, res) => {
   const { id, userId } = req.params;
-  const project = db.prepare('SELECT owner_id, creator_id FROM projects WHERE id = ?').get(id);
+  const project = await db.prepare('SELECT owner_id, creator_id FROM projects WHERE id = ?').get(id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
   // 1. Block removal of creator
@@ -261,25 +258,25 @@ router.delete('/:id/members/:userId', authMiddleware, (req, res) => {
   }
 
   // 3. Prevent Lead from removing an Admin
-  const targetUser = db.prepare('SELECT role FROM users WHERE id = ?').get(userId);
+  const targetUser = await db.prepare('SELECT role FROM users WHERE id = ?').get(userId);
   if (req.user.role !== 'admin' && targetUser?.role === 'admin') {
     return res.status(403).json({ error: 'Project Leads cannot remove Administrators' });
   }
 
   // 4. Fail-safe: Ensure at least one admin remains
   if (targetUser?.role === 'admin') {
-    const otherAdmins = db.prepare(`
+    const otherAdmins = await db.prepare(`
       SELECT COUNT(*) as count FROM project_members pm
       JOIN users u ON u.id = pm.user_id
       WHERE pm.project_id = ? AND u.role = 'admin' AND u.id != ?
     `).get(id, userId);
     
-    if (otherAdmins.count === 0) {
+    if (parseInt(otherAdmins.count) === 0) {
       return res.status(403).json({ error: 'Every project must have at least one Administrator' });
     }
   }
 
-  db.prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').run(id, userId);
+  await db.prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').run(id, userId);
   res.json({ success: true });
 });
 

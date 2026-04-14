@@ -14,7 +14,8 @@ const AVATAR_COLORS = [
 // POST /api/auth/setup  — only works if zero users exist (creates first admin)
 router.post('/setup', async (req, res) => {
   try {
-    const count = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+    const row = await db.prepare('SELECT COUNT(*) as c FROM users').get();
+    const count = parseInt(row.c || row.count || 0);
     if (count > 0) {
       return res.status(403).json({ error: 'Setup already complete. Contact your admin.' });
     }
@@ -28,7 +29,7 @@ router.post('/setup', async (req, res) => {
 
     const hashed = await bcrypt.hash(password, 10);
     const color = AVATAR_COLORS[0];
-    const result = db.prepare(
+    const result = await db.prepare(
       'INSERT INTO users (name, email, password, avatar_color, role, timezone) VALUES (?, ?, ?, ?, ?, ?)'
     ).run(name, email, hashed, color, 'admin', 'UTC');
 
@@ -42,8 +43,9 @@ router.post('/setup', async (req, res) => {
 });
 
 // GET /api/auth/needs-setup  — frontend checks this on load
-router.get('/needs-setup', (req, res) => {
-  const count = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+router.get('/needs-setup', async (req, res) => {
+  const row = await db.prepare('SELECT COUNT(*) as c FROM users').get();
+  const count = parseInt(row.c || row.count || 0);
   res.json({ needsSetup: count === 0 });
 });
 
@@ -54,7 +56,7 @@ router.post('/login', async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password required' });
     }
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email);
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
     const match = await bcrypt.compare(password, user.password);

@@ -26,8 +26,8 @@ function adminOnly(req, res, next) {
 }
 
 // GET /api/users — all users (for assignee dropdown)
-router.get('/', authMiddleware, (req, res) => {
-  const users = db.prepare(
+router.get('/', authMiddleware, async (req, res) => {
+  const users = await db.prepare(
     'SELECT id, name, email, avatar_color, role, created_at FROM users ORDER BY name'
   ).all();
   res.json(users);
@@ -48,13 +48,13 @@ router.post('/', authMiddleware, adminOrLead, async (req, res) => {
     let userRole = ['admin', 'lead', 'member'].includes(role) ? role : 'member';
     if (req.user.role !== 'admin' && userRole === 'admin') userRole = 'member';
 
-    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const existing = await db.prepare('SELECT id FROM users WHERE email = ?').get(email);
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
     const hashed = await bcrypt.hash(password, 10);
     const color = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
 
-    const result = db.prepare(
+    const result = await db.prepare(
       'INSERT INTO users (name, email, password, avatar_color, role) VALUES (?, ?, ?, ?, ?)'
     ).run(name, email, hashed, color, userRole);
 
@@ -62,9 +62,9 @@ router.post('/', authMiddleware, adminOrLead, async (req, res) => {
 
     // Auto-boarding logic
     if (projectId) {
-      const proj = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId);
+      const proj = await db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId);
       if (proj && (req.user.role === 'admin' || proj.owner_id === req.user.id)) {
-        db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)').run(projectId, userId);
+        await db.prepare('INSERT INTO project_members (project_id, user_id) ON CONFLICT DO NOTHING VALUES (?, ?)').run(projectId, userId);
       }
     }
 
@@ -78,17 +78,17 @@ router.post('/', authMiddleware, adminOrLead, async (req, res) => {
 });
 
 // DELETE /api/users/:id — admin removes a user
-router.delete('/:id', authMiddleware, adminOnly, (req, res) => {
+router.delete('/:id', authMiddleware, adminOnly, async (req, res) => {
   const { id } = req.params;
   if (parseInt(id) === req.user.id) {
     return res.status(400).json({ error: 'Cannot delete your own account' });
   }
-  db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  await db.prepare('DELETE FROM users WHERE id = ?').run(id);
   res.json({ success: true });
 });
 
 // PATCH /api/users/:id/role — change global role
-router.patch('/:id/role', authMiddleware, adminOrLead, (req, res) => {
+router.patch('/:id/role', authMiddleware, adminOrLead, async (req, res) => {
   const { id } = req.params;
   const { role } = req.body;
   if (parseInt(id) === req.user.id) {
@@ -104,13 +104,13 @@ router.patch('/:id/role', authMiddleware, adminOrLead, (req, res) => {
     if (role === 'admin') return res.status(403).json({ error: 'Only admins can grant admin role' });
 
     // 2. Prevent non-admins from demoting or modifying existing admins
-    const targetUser = db.prepare('SELECT role FROM users WHERE id = ?').get(id);
+    const targetUser = await db.prepare('SELECT role FROM users WHERE id = ?').get(id);
     if (targetUser?.role === 'admin') {
       return res.status(403).json({ error: 'Only admins can modify another admin\'s role' });
     }
 
     // 3. Verify the target user is a member of one of their projects
-    const shared = db.prepare(`
+    const shared = await db.prepare(`
       SELECT 1 FROM project_members pm
       JOIN projects p ON p.id = pm.project_id
       WHERE pm.user_id = ? AND p.owner_id = ?
@@ -119,17 +119,17 @@ router.patch('/:id/role', authMiddleware, adminOrLead, (req, res) => {
     if (!shared) return res.status(403).json({ error: 'You can only manage roles for members of your own projects' });
   }
 
-  db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, id);
+  await db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, id);
   res.json({ success: true, role });
 });
 
 // GET /api/users/me — profile and project info
-router.get('/me', authMiddleware, (req, res) => {
+router.get('/me', authMiddleware, async (req, res) => {
   try {
-    const user = db.prepare('SELECT id, name, email, avatar_color, avatar_url, timezone, role, created_at FROM users WHERE id = ?').get(req.user.id);
+    const user = await db.prepare('SELECT id, name, email, avatar_color, avatar_url, timezone, role, created_at FROM users WHERE id = ?').get(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const projects = db.prepare(`
+    const projects = await db.prepare(`
       SELECT p.id, p.name, p.key_prefix, p.owner_id
       FROM projects p
       INNER JOIN project_members pm ON pm.project_id = p.id
@@ -151,12 +151,12 @@ router.get('/me', authMiddleware, (req, res) => {
 });
 
 // PUT /api/users/me/profile — update profile data
-router.put('/me/profile', authMiddleware, (req, res) => {
+router.put('/me/profile', authMiddleware, async (req, res) => {
   try {
     const { name, timezone, avatar_url } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
 
-    db.prepare('UPDATE users SET name = ?, timezone = ?, avatar_url = ? WHERE id = ?')
+    await db.prepare('UPDATE users SET name = ?, timezone = ?, avatar_url = ? WHERE id = ?')
       .run(name, timezone || 'UTC', avatar_url || null, req.user.id);
 
     res.json({ success: true, name, timezone, avatar_url });
@@ -173,14 +173,14 @@ router.put('/me/password', authMiddleware, async (req, res) => {
     if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Both passwords are required' });
     if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
 
-    const user = db.prepare('SELECT password FROM users WHERE id = ?').get(req.user.id);
+    const user = await db.prepare('SELECT password FROM users WHERE id = ?').get(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const match = await bcrypt.compare(currentPassword, user.password);
     if (!match) return res.status(401).json({ error: 'Incorrect current password' });
 
     const hashed = await bcrypt.hash(newPassword, 10);
-    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, req.user.id);
+    await db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, req.user.id);
 
     res.json({ success: true });
   } catch (err) {

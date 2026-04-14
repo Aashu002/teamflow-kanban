@@ -4,18 +4,16 @@ const { authMiddleware } = require('../middleware/auth');
 const router = express.Router();
 
 // GET /api/dashboard
-router.get('/', authMiddleware, (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
   const userId = req.user.id;
   const isAdmin = req.user.role === 'admin';
   const { projectId, startDate, endDate } = req.query;
 
   const projectFilter = projectId && projectId !== 'all' ? Number(projectId) : null;
-  const dateFilterSql = startDate && endDate ? `AND DATE(created_at) BETWEEN ? AND ?` : '';
-  const dateParams = startDate && endDate ? [startDate, endDate] : [];
 
   // ── 1. User's projects ──────────────────────────────────────────────────
   const projects = isAdmin
-    ? db.prepare(`
+    ? await db.prepare(`
         SELECT p.*, u.name as owner_name,
           (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) as task_count,
           (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') as done_count,
@@ -23,7 +21,7 @@ router.get('/', authMiddleware, (req, res) => {
         FROM projects p LEFT JOIN users u ON u.id = p.owner_id
         ORDER BY p.created_at DESC
       `).all()
-    : db.prepare(`
+    : await db.prepare(`
         SELECT p.*, u.name as owner_name,
           (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) as task_count,
           (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') as done_count,
@@ -34,7 +32,7 @@ router.get('/', authMiddleware, (req, res) => {
       `).all(userId);
 
   // ── 2. Tasks assigned to this user (open only) ──────────────────────────
-  const myTasks = db.prepare(`
+  const myTasks = await db.prepare(`
     SELECT t.*, p.key_prefix, p.name as project_name,
       creator.name as creator_name, creator.avatar_color as creator_color
     FROM tasks t
@@ -50,7 +48,7 @@ router.get('/', authMiddleware, (req, res) => {
 
   // ── 3. Recent activity (tasks + comments across user's projects) ─────────
   const recentTasks = isAdmin
-    ? db.prepare(`
+    ? await db.prepare(`
         SELECT t.id, t.title, t.task_number, t.task_type, t.status, t.created_at,
           p.key_prefix, p.name as project_name, p.id as project_id,
           u.name as actor_name, u.avatar_color as actor_color
@@ -60,7 +58,7 @@ router.get('/', authMiddleware, (req, res) => {
         WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''}
         ORDER BY t.created_at DESC LIMIT 12
       `).all(...(projectFilter ? [projectFilter] : []))
-    : db.prepare(`
+    : await db.prepare(`
         SELECT t.id, t.title, t.task_number, t.task_type, t.status, t.created_at,
           p.key_prefix, p.name as project_name, p.id as project_id,
           u.name as actor_name, u.avatar_color as actor_color
@@ -73,7 +71,7 @@ router.get('/', authMiddleware, (req, res) => {
       `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
 
   const recentComments = isAdmin
-    ? db.prepare(`
+    ? await db.prepare(`
         SELECT c.id, c.content, c.created_at, c.task_id,
           t.title as task_title, t.task_number, t.id as task_db_id,
           p.key_prefix, p.name as project_name, p.id as project_id,
@@ -85,7 +83,7 @@ router.get('/', authMiddleware, (req, res) => {
         WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''}
         ORDER BY c.created_at DESC LIMIT 12
       `).all(...(projectFilter ? [projectFilter] : []))
-    : db.prepare(`
+    : await db.prepare(`
         SELECT c.id, c.content, c.created_at, c.task_id,
           t.title as task_title, t.task_number, t.id as task_db_id,
           p.key_prefix, p.name as project_name, p.id as project_id,
@@ -136,49 +134,49 @@ router.get('/', authMiddleware, (req, res) => {
   const endIso     = chartEnd.toISOString().split('T')[0];
 
   const createdByDay = isAdmin
-    ? db.prepare(`SELECT DATE(created_at) as day, COUNT(*) as count FROM tasks WHERE DATE(created_at) BETWEEN ? AND ? ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY DATE(created_at)`).all(...(projectFilter ? [startIso, endIso, projectFilter] : [startIso, endIso]))
-    : db.prepare(`SELECT DATE(t.created_at) as day, COUNT(*) as count FROM tasks t INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ? WHERE DATE(t.created_at) BETWEEN ? AND ? ${projectFilter ? 'AND t.project_id = ?' : ''} GROUP BY DATE(t.created_at)`).all(...(projectFilter ? [userId, startIso, endIso, projectFilter] : [userId, startIso, endIso]));
+    ? await db.prepare(`SELECT t.created_at::date as day, COUNT(*) as count FROM tasks t WHERE t.created_at::date BETWEEN ? AND ? ${projectFilter ? 'AND t.project_id = ?' : ''} GROUP BY t.created_at::date`).all(...(projectFilter ? [startIso, endIso, projectFilter] : [startIso, endIso]))
+    : await db.prepare(`SELECT t.created_at::date as day, COUNT(*) as count FROM tasks t INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ? WHERE t.created_at::date BETWEEN ? AND ? ${projectFilter ? 'AND t.project_id = ?' : ''} GROUP BY t.created_at::date`).all(...(projectFilter ? [userId, startIso, endIso, projectFilter] : [userId, startIso, endIso]));
 
   const completedByDay = isAdmin
-    ? db.prepare(`SELECT DATE(updated_at) as day, COUNT(*) as count FROM tasks WHERE status = 'done' AND DATE(updated_at) BETWEEN ? AND ? ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY DATE(updated_at)`).all(...(projectFilter ? [startIso, endIso, projectFilter] : [startIso, endIso]))
-    : db.prepare(`SELECT DATE(t.updated_at) as day, COUNT(*) as count FROM tasks t INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ? WHERE t.status = 'done' AND DATE(t.updated_at) BETWEEN ? AND ? ${projectFilter ? 'AND t.project_id = ?' : ''} GROUP BY DATE(t.updated_at)`).all(...(projectFilter ? [userId, startIso, endIso, projectFilter] : [userId, startIso, endIso]));
+    ? await db.prepare(`SELECT t.updated_at::date as day, COUNT(*) as count FROM tasks t WHERE t.status = 'done' AND t.updated_at::date BETWEEN ? AND ? ${projectFilter ? 'AND t.project_id = ?' : ''} GROUP BY t.updated_at::date`).all(...(projectFilter ? [startIso, endIso, projectFilter] : [startIso, endIso]))
+    : await db.prepare(`SELECT t.updated_at::date as day, COUNT(*) as count FROM tasks t INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ? WHERE t.status = 'done' AND t.updated_at::date BETWEEN ? AND ? ${projectFilter ? 'AND t.project_id = ?' : ''} GROUP BY t.updated_at::date`).all(...(projectFilter ? [userId, startIso, endIso, projectFilter] : [userId, startIso, endIso]));
 
   // Build days array for chart
   const days = [];
-  let curr = new Date(chartStart);
-  curr.setHours(12, 0, 0, 0); // avoid DST issues
-  while (curr <= chartEnd) {
-    days.push(curr.toISOString().split('T')[0]);
-    curr.setDate(curr.getDate() + 1);
+  let currStep = new Date(chartStart);
+  currStep.setHours(12, 0, 0, 0); // avoid DST issues
+  while (currStep <= chartEnd) {
+    days.push(currStep.toISOString().split('T')[0]);
+    currStep.setDate(currStep.getDate() + 1);
     if (days.length > 90) break; // Safety
   }
 
-  const createdMap = Object.fromEntries(createdByDay.map(r => [r.day, r.count]));
-  const completedMap = Object.fromEntries(completedByDay.map(r => [r.day, r.count]));
+  const createdMap = Object.fromEntries(createdByDay.map(r => [r.day instanceof Date ? r.day.toISOString().split('T')[0] : r.day, r.count]));
+  const completedMap = Object.fromEntries(completedByDay.map(r => [r.day instanceof Date ? r.day.toISOString().split('T')[0] : r.day, r.count]));
 
   const burndown = days.map(day => ({
     day,
     label: new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
-    created: createdMap[day] || 0,
-    completed: completedMap[day] || 0,
+    created: parseInt(createdMap[day] || 0),
+    completed: parseInt(completedMap[day] || 0),
   }));
 
   // ── 5. Stats by Project ─────────────────────────────
   const rawStatusCounts = isAdmin
-    ? db.prepare(`SELECT status, COUNT(*) as count FROM tasks WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY status`).all(...(projectFilter ? [projectFilter] : []))
-    : db.prepare(`
+    ? await db.prepare(`SELECT status, COUNT(*) as count FROM tasks WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY status`).all(...(projectFilter ? [projectFilter] : []))
+    : await db.prepare(`
         SELECT t.status, COUNT(*) as count FROM tasks t
         INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
         WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''}
         GROUP BY t.status
       `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
 
-  const statusCounts = rawStatusCounts;
-  const totalTickets = rawStatusCounts.reduce((s, r) => s + r.count, 0);
+  const statusCounts = rawStatusCounts.map(r => ({ status: r.status, count: parseInt(r.count) }));
+  const totalTickets = statusCounts.reduce((s, r) => s + r.count, 0);
 
   const priorityCounts = isAdmin
-    ? db.prepare(`SELECT priority, COUNT(*) as count FROM tasks WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY priority`).all(...(projectFilter ? [projectFilter] : []))
-    : db.prepare(`
+    ? await db.prepare(`SELECT priority, COUNT(*) as count FROM tasks WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY priority`).all(...(projectFilter ? [projectFilter] : []))
+    : await db.prepare(`
         SELECT t.priority, COUNT(*) as count FROM tasks t
         INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
         WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''}
@@ -186,8 +184,8 @@ router.get('/', authMiddleware, (req, res) => {
       `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
 
   const typeCounts = isAdmin
-    ? db.prepare(`SELECT task_type, COUNT(*) as count FROM tasks WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY task_type`).all(...(projectFilter ? [projectFilter] : []))
-    : db.prepare(`
+    ? await db.prepare(`SELECT task_type, COUNT(*) as count FROM tasks WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY task_type`).all(...(projectFilter ? [projectFilter] : []))
+    : await db.prepare(`
         SELECT t.task_type, COUNT(*) as count FROM tasks t
         INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
         WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''}
@@ -195,77 +193,74 @@ router.get('/', authMiddleware, (req, res) => {
       `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
 
   const hourStats = isAdmin
-    ? db.prepare(`
+    ? await db.prepare(`
         SELECT u.name, SUM(h.hours) as total_hours FROM hour_logs h
         INNER JOIN users u ON u.id = h.user_id
-        GROUP BY u.id
+        GROUP BY u.id, u.name
         ORDER BY total_hours DESC
       `).all()
-    : db.prepare(`
+    : await db.prepare(`
         SELECT u.name, SUM(h.hours) as total_hours FROM hour_logs h
         INNER JOIN users u ON u.id = h.user_id
         INNER JOIN tasks t ON t.id = h.task_id
         INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
-        GROUP BY u.id
+        GROUP BY u.id, u.name
         ORDER BY total_hours DESC
       `).all(userId);
 
   // ── 7. Workload Balance: Active tasks per member ────────────────────────
   const workloadStats = isAdmin
-    ? db.prepare(`
+    ? await db.prepare(`
         SELECT u.name, COUNT(t.id) as active_count FROM users u
         LEFT JOIN tasks t ON t.assignee_id = u.id AND t.status != 'done' ${projectFilter ? 'AND t.project_id = ?' : ''}
-        GROUP BY u.id ORDER BY active_count DESC
+        GROUP BY u.id, u.name ORDER BY active_count DESC
       `).all(...(projectFilter ? [projectFilter] : []))
-    : db.prepare(`
+    : await db.prepare(`
         SELECT u.name, COUNT(t.id) as active_count FROM users u
         INNER JOIN project_members pm ON pm.user_id = u.id
         LEFT JOIN tasks t ON t.assignee_id = u.id AND t.status != 'done' AND t.project_id = pm.project_id
         WHERE pm.project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)
         ${projectFilter ? 'AND pm.project_id = ?' : ''}
-        GROUP BY u.id ORDER BY active_count DESC
+        GROUP BY u.id, u.name ORDER BY active_count DESC
       `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
 
   // ── 8. Estimation Accuracy: Logged vs Estimated ────────────────────────
   const accuracyStats = isAdmin
-    ? db.prepare(`
-        SELECT t.title, t.hours_estimated as estimated, IFNULL(SUM(h.hours), 0) as actual
+    ? await db.prepare(`
+        SELECT t.title, t.hours_estimated as estimated, COALESCE(SUM(h.hours), 0) as actual
         FROM tasks t
         LEFT JOIN hour_logs h ON h.task_id = t.id
         WHERE t.status = 'done' AND t.hours_estimated > 0 ${projectFilter ? 'AND t.project_id = ?' : ''}
-        GROUP BY t.id LIMIT 8
+        GROUP BY t.id, t.title, t.hours_estimated LIMIT 8
       `).all(...(projectFilter ? [projectFilter] : []))
-    : db.prepare(`
-        SELECT t.title, t.hours_estimated as estimated, IFNULL(SUM(h.hours), 0) as actual
+    : await db.prepare(`
+        SELECT t.title, t.hours_estimated as estimated, COALESCE(SUM(h.hours), 0) as actual
         FROM tasks t
         INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
         LEFT JOIN hour_logs h ON h.task_id = t.id
         WHERE t.status = 'done' AND t.hours_estimated > 0 ${projectFilter ? 'AND t.project_id = ?' : ''}
-        GROUP BY t.id LIMIT 8
+        GROUP BY t.id, t.title, t.hours_estimated LIMIT 8
       `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
 
   // ── 9. Aging Tasks: Stale tasks not touched in 7 days ───────────────────
   const agingTasks = isAdmin
-    ? db.prepare(`
+    ? await db.prepare(`
         SELECT t.title, t.status, t.updated_at, p.key_prefix, t.task_number
         FROM tasks t
         INNER JOIN projects p ON p.id = t.project_id
-        WHERE t.status != 'done' AND t.updated_at < DATETIME('now', '-7 days') ${projectFilter ? 'AND t.project_id = ?' : ''}
+        WHERE t.status != 'done' AND t.updated_at < CURRENT_TIMESTAMP - INTERVAL '7 days' ${projectFilter ? 'AND t.project_id = ?' : ''}
         ORDER BY t.updated_at ASC LIMIT 10
       `).all(...(projectFilter ? [projectFilter] : []))
-    : db.prepare(`
+    : await db.prepare(`
         SELECT t.title, t.status, t.updated_at, p.key_prefix, t.task_number
         FROM tasks t
         INNER JOIN projects p ON p.id = t.project_id
         INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
-        WHERE t.status != 'done' AND t.updated_at < DATETIME('now', '-7 days') ${projectFilter ? 'AND t.project_id = ?' : ''}
+        WHERE t.status != 'done' AND t.updated_at < CURRENT_TIMESTAMP - INTERVAL '7 days' ${projectFilter ? 'AND t.project_id = ?' : ''}
         ORDER BY t.updated_at ASC LIMIT 10
       `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
 
-  // Section 10 removed in favor of Section 11 Burndown
-
   // ── 11. Featured Project Burndown Chart ────────────────────────────────
-  // If projectFilter is set, use that. Otherwise, pick project with closest deadline.
   const featured = projectFilter 
     ? projects.find(p => p.id === projectFilter)
     : projects
@@ -281,29 +276,29 @@ router.get('/', authMiddleware, (req, res) => {
       : new Date(start.getTime() + 14 * 24 * 60 * 60 * 1000); // Default 14 days
     
     // Get all tasks for this project
-    const pTasks = db.prepare(`SELECT status, updated_at, created_at, hours_estimated FROM tasks WHERE project_id = ?`).all(featured.id);
+    const pTasks = await db.prepare(`SELECT status, updated_at, created_at, hours_estimated FROM tasks WHERE project_id = ?`).all(featured.id);
     const totalWork = pTasks.reduce((s, t) => s + (t.hours_estimated || 1), 0);
     
     // Build days array
     const chartDays = [];
-    let curr = new Date(start);
-    curr.setHours(12, 0, 0, 0);
-    const last = new Date(end);
-    last.setHours(23, 59, 59, 999);
+    let currDay = new Date(start);
+    currDay.setHours(12, 0, 0, 0);
+    const lastDay = new Date(end);
+    lastDay.setHours(23, 59, 59, 999);
 
-    const maxDays = 90;
-    while (curr <= last && chartDays.length < maxDays) {
-      chartDays.push(new Date(curr));
-      curr.setDate(curr.getDate() + 1);
+    const maxDaysCount = 90;
+    while (currDay <= lastDay && chartDays.length < maxDaysCount) {
+      chartDays.push(new Date(currDay));
+      currDay.setDate(currDay.getDate() + 1);
     }
 
     burndownData = chartDays.map((d, idx) => {
       const dayStr = d.toISOString().split('T')[0];
-      const dayEnd = new Date(d);
-      dayEnd.setHours(23,59,59,999);
+      const dEnd = new Date(d);
+      dEnd.setHours(23,59,59,999);
 
       const workDoneByDay = pTasks
-        .filter(t => t.status === 'done' && t.updated_at && new Date(t.updated_at) <= dayEnd)
+        .filter(t => t.status === 'done' && t.updated_at && new Date(t.updated_at) <= dEnd)
         .reduce((s, t) => s + (t.hours_estimated || 1), 0);
 
       const remaining = Math.max(0, totalWork - workDoneByDay);
@@ -339,13 +334,17 @@ router.get('/', authMiddleware, (req, res) => {
   };
 
   if (featured) {
-    const total = db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE project_id = ?`).get(featured.id).count;
-    const pending = db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE project_id = ? AND status != 'done'`).get(featured.id).count;
+    const totalRes = await db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE project_id = ?`).get(featured.id);
+    const total = parseInt(totalRes.count);
+    const pendingRes = await db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE project_id = ? AND status != 'done'`).get(featured.id);
+    const pending = parseInt(pendingRes.count);
     const perc = total > 0 ? Math.round((pending / total) * 100) : 0;
     
-    // Additional metrics for a richer summary
-    const blockers = db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE project_id = ? AND status != 'done' AND priority = 'high'`).get(featured.id).count;
-    const staleCount = db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE project_id = ? AND status != 'done' AND updated_at < DATETIME('now', '-3 days')`).get(featured.id).count;
+    // Additional metrics
+    const blockersRes = await db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE project_id = ? AND status != 'done' AND priority = 'high'`).get(featured.id);
+    const blockers = parseInt(blockersRes.count);
+    const staleRes = await db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE project_id = ? AND status != 'done' AND updated_at < CURRENT_TIMESTAMP - INTERVAL '3 days'`).get(featured.id);
+    const staleCount = parseInt(staleRes.count);
 
     let daysDiff = 0;
     let deadlineStr = 'unspecified';
@@ -386,13 +385,6 @@ router.get('/', authMiddleware, (req, res) => {
       nextStep = "Next Milestone: Maintain momentum and begin closing pending low-priority tasks.";
     }
 
-    // Add extra color for blockers
-    if (healthStatus === 'good' && blockers > 3) {
-      healthStatus = 'warning';
-      summaryText += ` However, ${blockers} high-priority tasks need attention.`;
-      nextStep = "Alert: Address the growing number of high-priority blockers to stay on track.";
-    }
-
     projectHealth = {
       percentagePending: perc,
       daysRemaining: daysDiff,
@@ -408,7 +400,6 @@ router.get('/', authMiddleware, (req, res) => {
     };
   }
 
-  // ── 6. Ticket stats ──────────────────────────────────────────────────────
   const stats = {
     total: myOpenTasks.length,
     high: myOpenTasks.filter(t => t.priority === 'high').length,
