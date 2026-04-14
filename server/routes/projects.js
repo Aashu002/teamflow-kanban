@@ -59,12 +59,17 @@ router.post('/', authMiddleware, adminOnly, asyncHandler(async (req, res) => {
 
   const projectId = result.lastInsertRowid;
   
-  // Ensure the owner is a member
+  // Ensure the designated owner is a project member
   await db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT (project_id, user_id) DO NOTHING').run(projectId, ownerId);
+  
+  // Also ensure the logged-in admin creator is a member (they may differ from the owner)
+  if (req.user.id !== ownerId) {
+    await db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT (project_id, user_id) DO NOTHING').run(projectId, req.user.id);
+  }
 
   if (Array.isArray(memberIds)) {
     for (const uid of memberIds) {
-      if (uid !== ownerId) {
+      if (uid !== ownerId && uid !== req.user.id) {
         await db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT (project_id, user_id) DO NOTHING').run(projectId, uid);
       }
     }
@@ -155,12 +160,23 @@ router.post('/:id/requests', authMiddleware, asyncHandler(async (req, res) => {
 router.get('/:id', authMiddleware, asyncHandler(async (req, res) => {
   const project = await db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  if (req.user.role !== 'admin' && !(await isMember(req.params.id, req.user.id))) {
+  if (req.user.role !== 'admin' && !(await isMember(req.params.id, req.user.id, req.user.role))) {
     return res.status(403).json({ error: 'Not a member of this project' });
   }
+
+  // Safety backfill: ensure owner and creator are always in project_members
+  // (fixes projects created before the ON CONFLICT bug was fixed)
+  if (project.owner_id) {
+    await db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT (project_id, user_id) DO NOTHING').run(project.id, project.owner_id);
+  }
+  if (project.creator_id && project.creator_id !== project.owner_id) {
+    await db.prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT (project_id, user_id) DO NOTHING').run(project.id, project.creator_id);
+  }
+
   const members = await db.prepare(`
     SELECT u.id, u.name, u.email, u.avatar_color, u.role FROM users u
     INNER JOIN project_members pm ON pm.user_id = u.id WHERE pm.project_id = ?
+    ORDER BY u.name ASC
   `).all(req.params.id);
   res.json({ ...project, members });
 }));

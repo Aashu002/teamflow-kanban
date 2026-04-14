@@ -215,6 +215,7 @@ function ProjectMembersModal({ project, onClose, onUpdated }) {
   const [loading, setLoading] = useState(true);
   const [pendingRoles, setPendingRoles] = useState({}); // userId -> newRole
   const [pendingRemovals, setPendingRemovals] = useState([]); // array of userIds
+  const [pendingAdditions, setPendingAdditions] = useState([]); // array of user objects to add
   const [saving, setSaving] = useState(false);
 
   // Search & Selection State
@@ -239,16 +240,21 @@ function ProjectMembersModal({ project, onClose, onUpdated }) {
 
   const handleSaveAll = async () => {
     const roleEntries = Object.entries(pendingRoles);
-    if (roleEntries.length === 0 && pendingRemovals.length === 0) return onClose();
+    if (roleEntries.length === 0 && pendingRemovals.length === 0 && pendingAdditions.length === 0) return onClose();
     
     setSaving(true);
     try {
-      // 1. Handle Role Changes
+      // 1. Handle Additions
+      if (pendingAdditions.length > 0) {
+        await api.post(`/projects/${project.id}/members`, { userIds: pendingAdditions.map(u => u.id) });
+      }
+
+      // 2. Handle Role Changes
       for (const [uid, role] of roleEntries) {
         await api.patch(`/users/${uid}/role`, { role });
       }
       
-      // 2. Handle Removals
+      // 3. Handle Removals
       for (const uid of pendingRemovals) {
         await api.delete(`/projects/${project.id}/members/${uid}`);
       }
@@ -270,33 +276,23 @@ function ProjectMembersModal({ project, onClose, onUpdated }) {
     setPendingRemovals(prev => prev.filter(id => id !== userId));
   };
 
-  const handleAddMember = async (userId) => {
-    try {
-      await api.post(`/projects/${project.id}/members`, { userId });
-      const newUser = allUsers.find(u => u.id === userId);
-      if (newUser) setMembers(prev => [...prev, newUser]);
-      if (onUpdated) onUpdated();
-    } catch (err) {
-      alert('Failed to add member');
+  const handleStageAdd = (userObj) => {
+    if (!pendingAdditions.find(u => u.id === userObj.id)) {
+      setPendingAdditions(prev => [...prev, userObj]);
     }
+    setSearchTerm('');
   };
 
-  const handleAddSelected = async () => {
-    if (selectedUserIds.length === 0) return;
-    setSaving(true);
-    try {
-      await api.post(`/projects/${project.id}/members`, { userIds: selectedUserIds });
-      const newMembers = allUsers.filter(u => selectedUserIds.includes(u.id));
-      setMembers(prev => [...prev, ...newMembers]);
-      setSelectedUserIds([]);
-      setIsAdding(false);
-      setSearchTerm('');
-      if (onUpdated) onUpdated();
-    } catch (err) {
-      alert('Failed to add members');
-    } finally {
-      setSaving(false);
-    }
+  const handleUndoAdd = (userId) => {
+    setPendingAdditions(prev => prev.filter(u => u.id !== userId));
+  };
+
+  const handleAddSelected = () => {
+    const toAdd = allUsers.filter(u => selectedUserIds.includes(u.id) && !pendingAdditions.find(p => p.id === u.id));
+    setPendingAdditions(prev => [...prev, ...toAdd]);
+    setSelectedUserIds([]);
+    setIsAdding(false);
+    setSearchTerm('');
   };
 
   const toggleSelect = (id) => {
@@ -306,13 +302,15 @@ function ProjectMembersModal({ project, onClose, onUpdated }) {
   };
 
   const currentMemberIds = members.map(m => m.id);
+  const pendingAdditionIds = pendingAdditions.map(u => u.id);
   const availableUsers = allUsers.filter(u => 
-    !currentMemberIds.includes(u.id) && 
+    !currentMemberIds.includes(u.id) &&
+    !pendingAdditionIds.includes(u.id) &&
     (u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
      u.email.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const hasChanges = Object.keys(pendingRoles).length > 0 || pendingRemovals.length > 0;
+  const hasChanges = Object.keys(pendingRoles).length > 0 || pendingRemovals.length > 0 || pendingAdditions.length > 0;
 
   return (
     <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && !saving && onClose()}>
@@ -348,14 +346,14 @@ function ProjectMembersModal({ project, onClose, onUpdated }) {
                   borderRadius: 8, padding: 8, border: '1px solid var(--border-color)' 
                 }}>
                   {availableUsers.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: 12, color: 'var(--text-muted)', fontSize: 13 }}>No users found</div>
+                    <div style={{ textAlign: 'center', padding: 12, color: 'var(--text-muted)', fontSize: 13 }}>No users found (they may already be queued to add)</div>
                   ) : (
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 8px 8px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: 8 }}>
                         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Results</span>
                         {selectedUserIds.length > 0 && (
-                          <button className="btn btn-primary btn-sm" style={{ padding: '2px 8px', fontSize: 11 }} onClick={handleAddSelected} disabled={saving}>
-                            Add {selectedUserIds.length} Selected
+                          <button className="btn btn-primary btn-sm" style={{ padding: '2px 8px', fontSize: 11 }} onClick={handleAddSelected}>
+                            Queue {selectedUserIds.length} Selected
                           </button>
                         )}
                       </div>
@@ -374,8 +372,8 @@ function ProjectMembersModal({ project, onClose, onUpdated }) {
                               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{u.email}</div>
                             </div>
                           </div>
-                          <button className="btn btn-sm" style={{ padding: '2px 8px', fontSize: 11, background: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa' }} onClick={() => handleAddMember(u.id)}>
-                            Quick Add
+                          <button className="btn btn-sm" style={{ padding: '2px 8px', fontSize: 11, background: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa' }} onClick={() => handleStageAdd(u)}>
+                            + Queue
                           </button>
                         </div>
                       ))}
@@ -389,6 +387,22 @@ function ProjectMembersModal({ project, onClose, onUpdated }) {
         
         {loading ? <div className="loading-spinner" style={{ margin: '40px auto' }} /> : (
           <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+            {/* Pending additions preview */}
+            {pendingAdditions.length > 0 && (
+              <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(16, 185, 129, 0.07)', borderRadius: 8, border: '1px solid rgba(16,185,129,0.2)' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#10b981', textTransform: 'uppercase', marginBottom: 8 }}>Queued to Add ({pendingAdditions.length})</div>
+                {pendingAdditions.map(u => (
+                  <div key={u.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div className="user-avatar" style={{ background: u.avatar_color, width: 22, height: 22, fontSize: 9 }}>{initials(u.name)}</div>
+                      <span style={{ fontSize: 13 }}>{u.name}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{u.email}</span>
+                    </div>
+                    <button className="btn btn-sm btn-secondary" style={{ padding: '1px 8px', fontSize: 11 }} onClick={() => handleUndoAdd(u.id)}>Remove</button>
+                  </div>
+                ))}
+              </div>
+            )}
             <table className="data-table">
               <thead>
                 <tr>
