@@ -1,7 +1,8 @@
 const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 
-const raw = new DatabaseSync(path.join(__dirname, 'kanban.db'));
+const dbPath = process.env.DB_PATH || path.join(__dirname, 'kanban.db');
+const raw = new DatabaseSync(dbPath);
 
 raw.exec('PRAGMA journal_mode = WAL');
 raw.exec('PRAGMA foreign_keys = ON');

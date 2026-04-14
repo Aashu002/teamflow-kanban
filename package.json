@@ -1,12 +1,13 @@
 {
-  "name": "team-kanban",
+  "name": "team-flow-root",
   "version": "1.0.0",
+  "private": true,
   "scripts": {
-    "dev": "bash start.sh",
     "install-all": "npm install && cd client && npm install && cd ../server && npm install",
     "build": "cd client && npm run build",
     "start": "NODE_ENV=production node server/index.js",
-    "server": "node server/index.js",
-    "client": "cd client && npm run dev"
-  }
+    "dev": "./start.sh"
+  },
+  "dependencies": {},
+  "devDependencies": {}
 }
