@@ -54,6 +54,10 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.011em;
+  font-feature-settings: 'cv02', 'cv05', 'cv08', 'cv09', 'cv10', 'cv11';
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────────────────── */
@@ -2302,7 +2306,9 @@ body {
 .navbar-nav-link {
   color: var(--text-secondary) !important;
   text-decoration: none;
-  font-size: 13px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
   transition: color var(--transition);
   background: transparent;
   border: none;
@@ -2310,6 +2316,7 @@ body {
   padding: 0;
   display: flex;
   align-items: center;
+  font-optical-sizing: auto;
 }
 .navbar-nav-link:hover { color: var(--text-primary) !important; }
 
