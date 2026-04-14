@@ -5,8 +5,10 @@
 
 echo "⚡ Starting TeamFlow Setup..."
 
-# 1. Update system
-sudo apt-get update && sudo apt-get upgrade -y
+# 1. Update system (non-interactive to avoid stuck prompts)
+export DEBIAN_FRONTEND=noninteractive
+sudo apt-get update
+sudo apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade
 
 # 2. Install Node.js 20
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
