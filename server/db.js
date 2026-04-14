@@ -1,7 +1,11 @@
 const { DatabaseSync } = require('node:sqlite');
+const fs = require('fs');
 const path = require('path');
 
 const dbPath = process.env.DB_PATH || path.join(__dirname, 'kanban.db');
+// Ensure parent directory exists (critical for production volumes)
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
 const raw = new DatabaseSync(dbPath);
 
 raw.exec('PRAGMA journal_mode = WAL');

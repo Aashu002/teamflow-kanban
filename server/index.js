@@ -37,8 +37,10 @@ app.use(cors({
 }));
 app.use(express.json());
 
+const fs = require('fs');
 // Serve uploaded files statically
 const uploadsPath = process.env.UPLOADS_PATH || path.join(__dirname, 'uploads');
+fs.mkdirSync(uploadsPath, { recursive: true });
 app.use('/uploads', express.static(uploadsPath));
 
 // Routes
