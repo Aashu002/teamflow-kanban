@@ -39,13 +39,43 @@ function AuthenticatedLayout() {
 
 export default function App() {
   const [needsSetup, setNeedsSetup] = useState(null);
+  const [dbError, setDbError] = useState(null);
   const { user } = useAuth();
 
   useEffect(() => {
     api.get('/auth/needs-setup')
-      .then(r => setNeedsSetup(r.data.needsSetup))
-      .catch(() => setNeedsSetup(false));
+      .then(r => {
+        setNeedsSetup(r.data.needsSetup);
+        setDbError(null);
+      })
+      .catch((err) => {
+        console.error('Initial check failed:', err);
+        if (err.response?.status === 500) {
+          setDbError(err.response.data.details || 'Connection Refused');
+        } else {
+          setNeedsSetup(false);
+        }
+      });
   }, []);
+
+  if (dbError) {
+    return (
+      <div className="fatal-error-screen">
+        <div className="error-card shadow-lg">
+          <div className="error-icon">⚠️</div>
+          <h2>Database Connection Error</h2>
+          <p>TeamFlow cannot connect to the PostgreSQL database.</p>
+          <div className="error-details">
+            <code>{dbError}</code>
+          </div>
+          <div className="error-actions">
+            <p className="tip"><strong>Tip:</strong> Ensure your <code>DATABASE_URL</code> is correctly set in the Render Dashboard environment variables.</p>
+            <button className="btn-primary" onClick={() => window.location.reload()}>Retry Connection</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (needsSetup === null) {
     return <div className="loading-screen"><div className="loading-spinner" /></div>;

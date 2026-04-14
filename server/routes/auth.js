@@ -44,9 +44,14 @@ router.post('/setup', async (req, res) => {
 
 // GET /api/auth/needs-setup  — frontend checks this on load
 router.get('/needs-setup', async (req, res) => {
-  const row = await db.prepare('SELECT COUNT(*) as c FROM users').get();
-  const count = parseInt(row.c || row.count || 0);
-  res.json({ needsSetup: count === 0 });
+  try {
+    const row = await db.prepare('SELECT COUNT(*) as c FROM users').get();
+    const count = parseInt(row.c || row.count || 0);
+    res.json({ needsSetup: count === 0 });
+  } catch (err) {
+    console.error('❌ Needs-setup Check Failed:', err.message);
+    res.status(500).json({ error: 'Database connection failed', details: err.message });
+  }
 });
 
 // POST /api/auth/login

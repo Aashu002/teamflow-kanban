@@ -82,6 +82,59 @@ body {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ─── Fatal Error Screen ────────────────────────────────────────────── */
+.fatal-error-screen {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-base);
+  padding: 20px;
+}
+
+.error-card {
+  width: 100%; max-width: 500px;
+  background: var(--bg-surface);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius-xl);
+  padding: 40px;
+  text-align: center;
+  animation: slideUp 0.4s ease;
+}
+
+.error-icon {
+  font-size: 48px; margin-bottom: 20px;
+}
+
+.error-card h2 {
+  font-size: 24px; font-weight: 700; margin-bottom: 12px;
+  color: #fca5a5;
+}
+
+.error-card p {
+  color: var(--text-secondary); margin-bottom: 24px;
+}
+
+.error-details {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 16px; border-radius: var(--radius-md);
+  margin-bottom: 24px; text-align: left;
+  border: 1px solid var(--border);
+}
+
+.error-details code {
+  font-family: monospace; font-size: 13px; color: #f87171;
+  word-break: break-all;
+}
+
+.error-actions {
+  display: flex; flex-direction: column; gap: 16px; align-items: center;
+}
+
+.error-actions .tip {
+  font-size: 13px; color: var(--text-muted); margin: 0;
+}
+
+.error-actions .tip strong { color: var(--text-secondary); }
+
 /* ─── Auth Pages (Login / Setup) ─────────────────────────────────────── */
 .auth-page {
   min-height: 100vh;
