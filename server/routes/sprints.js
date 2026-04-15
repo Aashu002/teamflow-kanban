@@ -20,8 +20,8 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
   const sprints = await db.prepare(`
     SELECT s.*,
       COUNT(t.id) as task_count,
-      COALESCE(SUM(t.story_points), 0) as total_points,
-      COALESCE(SUM(CASE WHEN t.status = 'done' THEN t.story_points ELSE 0 END), 0) as completed_points
+      COALESCE(SUM(t.hours_estimated), 0) as total_hours,
+      COALESCE(SUM(CASE WHEN t.status = 'done' THEN t.hours_estimated ELSE 0 END), 0) as completed_hours
     FROM sprints s
     LEFT JOIN tasks t ON t.sprint_id = s.id
     WHERE s.project_id = ?

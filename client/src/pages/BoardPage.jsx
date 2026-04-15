@@ -54,7 +54,7 @@ export default function BoardPage() {
         setTasks(tasksRes.data);
         setSprints(sprintsRes.data);
         setActiveSprint(sprintsRes.data.find(s => s.status === 'active') || null);
-      } catch { navigate('/projects'); }
+      } catch { navigate('/home'); }
       finally { setLoading(false); }
     };
     init();
