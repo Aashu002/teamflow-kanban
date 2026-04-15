@@ -176,8 +176,31 @@ router.get('/search', authMiddleware, asyncHandler(async (req, res) => {
   res.json(tasks);
 }));
 
-// GET /api/tasks?projectId=X
+// GET /api/tasks?projectId=X[&sprintId=Y]
 router.get('/', authMiddleware, asyncHandler(async (req, res) => {
+  const { projectId, sprintId } = req.query;
+  if (!projectId) return res.status(400).json({ error: 'projectId required' });
+  if (!(await isMember(projectId, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
+
+  const sprintFilter = sprintId ? 'AND t.sprint_id = ?' : '';
+  const params = sprintId ? [projectId, sprintId] : [projectId];
+
+  const tasks = await db.prepare(`
+    SELECT t.*, p.key_prefix,
+      creator.name as creator_name, creator.avatar_color as creator_color,
+      assignee.name as assignee_name, assignee.avatar_color as assignee_color
+    FROM tasks t
+    LEFT JOIN projects p ON p.id = t.project_id
+    LEFT JOIN users creator ON creator.id = t.creator_id
+    LEFT JOIN users assignee ON assignee.id = t.assignee_id
+    WHERE t.project_id = ? ${sprintFilter}
+    ORDER BY t.task_number DESC
+  `).all(...params);
+  res.json(tasks);
+}));
+
+// GET /api/tasks/backlog?projectId=X — tasks NOT assigned to any sprint
+router.get('/backlog', authMiddleware, asyncHandler(async (req, res) => {
   const { projectId } = req.query;
   if (!projectId) return res.status(400).json({ error: 'projectId required' });
   if (!(await isMember(projectId, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
@@ -190,8 +213,10 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
     LEFT JOIN projects p ON p.id = t.project_id
     LEFT JOIN users creator ON creator.id = t.creator_id
     LEFT JOIN users assignee ON assignee.id = t.assignee_id
-    WHERE t.project_id = ?
-    ORDER BY t.task_number DESC
+    WHERE t.project_id = ? AND t.sprint_id IS NULL
+    ORDER BY
+      CASE t.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+      t.task_number DESC
   `).all(projectId);
   res.json(tasks);
 }));
@@ -235,11 +260,10 @@ router.get('/:id', authMiddleware, asyncHandler(async (req, res) => {
 
 // POST /api/tasks
 router.post('/', authMiddleware, asyncHandler(async (req, res) => {
-  const { title, description, status, priority, task_type, projectId, assigneeId, parentId } = req.body;
+  const { title, description, status, priority, task_type, projectId, assigneeId, parentId, sprint_id } = req.body;
   if (!title || !projectId) return res.status(400).json({ error: 'Title and projectId required' });
   if (!(await isMember(projectId, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
 
-  // Atomically get next task number for this project
   await db.prepare('UPDATE projects SET task_counter = task_counter + 1 WHERE id = ?').run(projectId);
   const row = await db.prepare('SELECT task_counter FROM projects WHERE id = ?').get(projectId);
   const task_counter = row.task_counter;
@@ -249,16 +273,12 @@ router.post('/', authMiddleware, asyncHandler(async (req, res) => {
   const t = VALID_TYPES.includes(task_type) ? task_type : 'task';
 
   const result = await db.prepare(`
-    INSERT INTO tasks (task_number, task_type, title, description, status, priority, project_id, creator_id, assignee_id, parent_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(task_counter, t, title, description || '', s, p, projectId, req.user.id, assigneeId || null, parentId || null);
+    INSERT INTO tasks (task_number, task_type, title, description, status, priority, project_id, creator_id, assignee_id, parent_id, sprint_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(task_counter, t, title, description || '', s, p, projectId, req.user.id, assigneeId || null, parentId || null, sprint_id || null);
 
   const task = await selectTask(result.lastInsertRowid);
-  
-  if (req.app.get('io')) {
-    req.app.get('io').to(`project_${projectId}`).emit('task_created', task);
-  }
-
+  if (req.app.get('io')) req.app.get('io').to(`project_${projectId}`).emit('task_created', task);
   res.status(201).json(task);
 }));
 
@@ -268,7 +288,7 @@ router.patch('/:id', authMiddleware, asyncHandler(async (req, res) => {
   if (!task) return res.status(404).json({ error: 'Task not found' });
   if (!(await isMember(task.project_id, req.user.id, req.user.role))) return res.status(403).json({ error: 'Not a member' });
 
-  const { title, description, status, priority, task_type, assigneeId, parentId, estimated_completion, hours_estimated } = req.body;
+  const { title, description, status, priority, task_type, assigneeId, parentId, estimated_completion, hours_estimated, sprint_id } = req.body;
   const s = VALID_STATUSES.includes(status) ? status : task.status;
   const p = VALID_PRIORITIES.includes(priority) ? priority : task.priority;
   const t = VALID_TYPES.includes(task_type) ? task_type : task.task_type;
@@ -276,24 +296,21 @@ router.patch('/:id', authMiddleware, asyncHandler(async (req, res) => {
   await db.prepare(`
     UPDATE tasks SET title=?, description=?, status=?, priority=?, task_type=?,
       assignee_id=?, parent_id=?, estimated_completion=?, hours_estimated=?,
-      updated_at=CURRENT_TIMESTAMP WHERE id=?
+      sprint_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
   `).run(
     title ?? task.title,
     description ?? task.description,
     s, p, t,
-    assigneeId !== undefined ? (assigneeId || null) : task.assignee_id,
-    parentId   !== undefined ? (parentId   || null) : task.parent_id,
+    assigneeId  !== undefined ? (assigneeId  || null) : task.assignee_id,
+    parentId    !== undefined ? (parentId    || null) : task.parent_id,
     estimated_completion !== undefined ? estimated_completion : (task.estimated_completion || null),
     hours_estimated      !== undefined ? hours_estimated      : (task.hours_estimated || 0),
+    sprint_id   !== undefined ? (sprint_id   || null) : task.sprint_id,
     req.params.id
   );
 
   const updatedTask = await selectTask(req.params.id);
-  
-  if (req.app.get('io')) {
-    req.app.get('io').to(`project_${updatedTask.project_id}`).emit('task_updated', updatedTask);
-  }
-
+  if (req.app.get('io')) req.app.get('io').to(`project_${updatedTask.project_id}`).emit('task_updated', updatedTask);
   res.json(updatedTask);
 }));
 

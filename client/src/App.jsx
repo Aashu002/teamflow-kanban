@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage.jsx';
 import SetupPage from './pages/SetupPage.jsx';
 import HomePage from './pages/HomePage.jsx';
 import BoardPage from './pages/BoardPage.jsx';
+import BacklogPage from './pages/BacklogPage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
 import TaskDetailPage from './pages/TaskDetailPage.jsx';
 import ProfilePage from './pages/ProfilePage.jsx';
@@ -97,8 +98,9 @@ export default function App() {
             <Route element={<ProtectedRoute><AuthenticatedLayout /></ProtectedRoute>}>
               <Route path="/home" element={<HomePage />} />
               
-              {/* Board & Task Detail */}
+              {/* Board, Backlog & Task Detail */}
               <Route path="/projects/:projectId/board" element={<BoardPage />} />
+              <Route path="/projects/:projectId/backlog" element={<BacklogPage />} />
               <Route path="/projects/:projectId/tasks/:taskKey" element={<TaskDetailPage />} />
 
               {/* Admin */}

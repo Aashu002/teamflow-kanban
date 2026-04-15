@@ -50,6 +50,7 @@ app.use('/api/projects', require('./routes/projects'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/search', require('./routes/search'));
+app.use('/api/sprints', require('./routes/sprints'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 

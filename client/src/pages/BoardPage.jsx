@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragOverlay
 } from '@dnd-kit/core';
@@ -27,9 +27,11 @@ export default function BoardPage() {
   const navigate = useNavigate();
   const { setHeaderData, clearHeaderData } = useNavbar();
   const [project, setProject] = useState(null);
-  const [viewMode, setViewMode] = useState('board'); // 'board' or 'backlog'
+  const [viewMode, setViewMode] = useState('board');
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
+  const [sprints, setSprints] = useState([]);
+  const [activeSprint, setActiveSprint] = useState(null); // the currently active sprint for this project
   const [loading, setLoading] = useState(true);
   const [activeTask, setActiveTask] = useState(null);
   const [createInColumn, setCreateInColumn] = useState(null);
@@ -42,13 +44,16 @@ export default function BoardPage() {
   useEffect(() => {
     const init = async () => {
       try {
-        const [projRes, tasksRes] = await Promise.all([
+        const [projRes, tasksRes, sprintsRes] = await Promise.all([
           api.get(`/projects/${projectId}`),
-          api.get(`/tasks?projectId=${projectId}`)
+          api.get(`/tasks?projectId=${projectId}`),
+          api.get(`/sprints?projectId=${projectId}`),
         ]);
         setProject(projRes.data);
         setMembers(projRes.data.members || []);
         setTasks(tasksRes.data);
+        setSprints(sprintsRes.data);
+        setActiveSprint(sprintsRes.data.find(s => s.status === 'active') || null);
       } catch { navigate('/projects'); }
       finally { setLoading(false); }
     };
@@ -97,10 +102,7 @@ export default function BoardPage() {
     return true;
   });
 
-  const boardTasks = filteredTasks.filter(t => t.status !== 'backlog');
-  const backlogTasks = filteredTasks.filter(t => t.status === 'backlog');
 
-  const tasksByCol = col => boardTasks.filter(t => t.status === col);
 
   const handleDragStart = ({ active }) => {
     setActiveTask(tasks.find(t => t.id === active.id) || null);
@@ -138,9 +140,44 @@ export default function BoardPage() {
   if (loading) return <div className="loading-screen"><div className="loading-spinner"/></div>;
 
   const canEditProject = isAdmin || project?.owner_id === user?.id;
+  const SPRINT_STATUS_COLOR = { planning: '#8b5cf6', active: '#10b981', completed: '#6b7280' };
+
+  // Sprint-filtered board tasks: if there's an active sprint, only show its tasks on the board
+  const sprintFilteredTasks = activeSprint
+    ? filteredTasks.filter(t => t.sprint_id === activeSprint.id || t.status === 'backlog')
+    : filteredTasks;
+
+  const boardTasks = sprintFilteredTasks.filter(t => t.status !== 'backlog');
+  const backlogTasks = filteredTasks.filter(t => t.status === 'backlog');
+  const tasksByCol = col => boardTasks.filter(t => t.status === col);
 
   return (
     <div className="board-page">
+      {/* Sprint Alert Banner — shown when there's an active sprint */}
+      {activeSprint && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '8px 20px', background: 'rgba(16,185,129,0.08)',
+          borderBottom: '1px solid rgba(16,185,129,0.2)',
+          fontSize: 13,
+        }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
+          <strong style={{ color: '#10b981' }}>Active: {activeSprint.name}</strong>
+          {activeSprint.goal && <span style={{ color: 'var(--text-secondary)' }}>· 🎯 {activeSprint.goal}</span>}
+          {activeSprint.end_date && (
+            <span style={{ color: 'var(--text-muted)', marginLeft: 'auto', fontSize: 12 }}>
+              Ends {new Date(activeSprint.end_date).toLocaleDateString()}
+            </span>
+          )}
+          <button
+            className="btn btn-secondary btn-sm"
+            style={{ marginLeft: 4, fontSize: 11 }}
+            onClick={() => navigate(`/projects/${projectId}/backlog`)}
+          >
+            📋 Sprint Planning
+          </button>
+        </div>
+      )}
 
       <div className="board-toolbar">
         <span className="board-toolbar-title">{viewMode === 'board' ? 'Kanban Board' : 'Project Backlog'}</span>
@@ -307,6 +344,7 @@ export default function BoardPage() {
           projectId={projectId}
           members={members}
           allTasks={tasks}
+          sprints={sprints}
           onClose={() => setCreateInColumn(null)}
           onCreated={handleTaskCreated}
         />

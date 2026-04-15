@@ -4,11 +4,13 @@ import { TYPE_META } from './TaskCard.jsx';
 import { useToast } from './Toast.jsx';
 import api from '../api.js';
 
-export default function CreateTaskModal({ defaultStatus, projectId, members, onClose, onCreated, allTasks = [] }) {
+export default function CreateTaskModal({ defaultStatus, projectId, members, onClose, onCreated, allTasks = [], sprints = [] }) {
   const { toast } = useToast();
+  const activeSprint = sprints.find(s => s.status === 'active');
   const [form, setForm] = useState({
     title: '', description: '', status: defaultStatus,
-    priority: 'medium', task_type: 'task', assigneeId: '', parentId: ''
+    priority: 'medium', task_type: 'task', assigneeId: '', parentId: '',
+    sprint_id: activeSprint?.id || ''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -30,6 +32,7 @@ export default function CreateTaskModal({ defaultStatus, projectId, members, onC
         projectId,
         assigneeId: form.assigneeId || null,
         parentId: form.parentId || null,
+        sprint_id: form.sprint_id || null,
       });
 
       // 1. Close dialog immediately
@@ -140,6 +143,21 @@ export default function CreateTaskModal({ defaultStatus, projectId, members, onC
               </div>
             )}
           </div>
+
+          {/* Sprint selector — only shown if project has sprints */}
+          {sprints.length > 0 && (
+            <div className="form-group">
+              <label className="form-label">Sprint</label>
+              <select id="task-sprint" name="sprint_id" className="form-select" value={form.sprint_id} onChange={handle}>
+                <option value="">📋 Project Backlog (no sprint)</option>
+                {sprints.filter(s => s.status !== 'completed').map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.status === 'active' ? '🟢' : '🟡'} {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>

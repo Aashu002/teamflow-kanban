@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import GlobalCreateTaskModal from './GlobalCreateTaskModal.jsx';
 import GlobalSearch from './GlobalSearch.jsx';
@@ -43,6 +43,7 @@ export default function Navbar() {
   const { projectName, onBack } = useNavbar();
   const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const userDropdownRef = useRef(null);
   const [showGlobalCreate, setShowGlobalCreate] = useState(false);
@@ -119,6 +120,17 @@ export default function Navbar() {
               <button className="user-dropdown-item" onClick={() => navigate('/projects/all')}>
                 🌍 All Projects directory
               </button>
+              {/* Show Backlog link when on a project page */}
+              {location.pathname.match(/\/projects\/(\.+?)\//) && (() => {
+                const match = location.pathname.match(/\/projects\/([^/]+)/);
+                const pid = match?.[1];
+                if (!pid || pid === 'all') return null;
+                return (
+                  <button className="user-dropdown-item" onClick={() => navigate(`/projects/${pid}/backlog`)}>
+                    📋 Project Backlog & Sprints
+                  </button>
+                );
+              })()}
             </Dropdown>
 
             <Dropdown label="Issues">

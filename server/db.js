@@ -195,6 +195,16 @@ const INITIAL_SCHEMA = [
     link_type TEXT DEFAULT 'relates_to',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(task_id, linked_task_id, link_type)
+  )`,
+  `CREATE TABLE IF NOT EXISTS sprints (
+    id SERIAL PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    goal TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'planning',
+    start_date DATE,
+    end_date DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`
 ];
 
@@ -207,6 +217,8 @@ async function initDb() {
     for (const statement of INITIAL_SCHEMA) {
       await client.query(statement);
     }
+    // Idempotent column additions — safe to run on every deploy
+    await client.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sprint_id INTEGER REFERENCES sprints(id) ON DELETE SET NULL`);
     console.log('✅ PostgreSQL Schema Verified');
   } catch (err) {
     console.error('❌ Database Initialization Error:', err.message);
