@@ -153,31 +153,36 @@ export default function BoardPage() {
 
   return (
     <div className="board-page">
-      {/* Sprint Alert Banner — shown when there's an active sprint */}
-      {activeSprint && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12,
-          padding: '8px 20px', background: 'rgba(16,185,129,0.08)',
-          borderBottom: '1px solid rgba(16,185,129,0.2)',
-          fontSize: 13,
-        }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
-          <strong style={{ color: '#10b981' }}>Active: {activeSprint.name}</strong>
-          {activeSprint.goal && <span style={{ color: 'var(--text-secondary)' }}>· 🎯 {activeSprint.goal}</span>}
-          {activeSprint.end_date && (
-            <span style={{ color: 'var(--text-muted)', marginLeft: 'auto', fontSize: 12 }}>
-              Ends {new Date(activeSprint.end_date).toLocaleDateString()}
-            </span>
-          )}
-          <button
-            className="btn btn-secondary btn-sm"
-            style={{ marginLeft: 4, fontSize: 11 }}
-            onClick={() => navigate(`/projects/${projectId}/backlog`)}
-          >
-            📋 Sprint Planning
-          </button>
-        </div>
-      )}
+      {/* Sprint Banner — always shown, changes based on whether a sprint is active */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '7px 20px',
+        background: activeSprint ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)',
+        borderBottom: `1px solid ${activeSprint ? 'rgba(16,185,129,0.2)' : 'var(--border-color)'}`,
+        fontSize: 13,
+      }}>
+        {activeSprint ? (
+          <>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
+            <strong style={{ color: '#10b981' }}>{activeSprint.name}</strong>
+            {activeSprint.goal && <span style={{ color: 'var(--text-secondary)' }}>· 🎯 {activeSprint.goal}</span>}
+            {activeSprint.start_date && (
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {new Date(activeSprint.start_date).toLocaleDateString()} – {activeSprint.end_date ? new Date(activeSprint.end_date).toLocaleDateString() : 'No end date'}
+              </span>
+            )}
+            <div style={{ flex: 1 }} />
+            <button className="btn btn-secondary btn-sm" style={{ fontSize: 11 }} onClick={() => navigate(`/projects/${projectId}/backlog`)}>📋 Sprint Planning</button>
+          </>
+        ) : (
+          <>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6b7280', flexShrink: 0 }} />
+            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>No active sprint</span>
+            <div style={{ flex: 1 }} />
+            <button className="btn btn-secondary btn-sm" style={{ fontSize: 11 }} onClick={() => navigate(`/projects/${projectId}/backlog`)}>📋 Create &amp; manage sprints</button>
+          </>
+        )}
+      </div>
 
       <div className="board-toolbar">
         <span className="board-toolbar-title">{viewMode === 'board' ? 'Kanban Board' : 'Project Backlog'}</span>
@@ -188,6 +193,15 @@ export default function BoardPage() {
           <button className={`admin-tab ${viewMode === 'board' ? 'active' : ''}`} style={{ padding: '4px 12px', minWidth: 80 }} onClick={() => setViewMode('board')}>Board</button>
           <button className={`admin-tab ${viewMode === 'backlog' ? 'active' : ''}`} style={{ padding: '4px 12px', minWidth: 80 }} onClick={() => setViewMode('backlog')}>Backlog ({tasks.filter(t => t.status === 'backlog').length})</button>
         </div>
+
+        {/* Always-visible Sprint Planning link */}
+        <button
+          className="btn btn-secondary btn-sm"
+          style={{ marginRight: 12, fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+          onClick={() => navigate(`/projects/${projectId}/backlog`)}
+        >
+          📋 Sprints {activeSprint ? <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} /> : <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#6b7280', display: 'inline-block' }} />}
+        </button>
 
         <div className="board-filter-group">
           <span className="board-filter-label">Type:</span>

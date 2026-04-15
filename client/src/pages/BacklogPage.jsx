@@ -166,6 +166,7 @@ export default function BacklogPage() {
   const [dragOverSide, setDragOverSide] = useState(null);
   const [filterType, setFilterType] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
+  const [editingSprint, setEditingSprint] = useState({}); // local edits before save
 
   const canManage = isAdmin || project?.owner_id === user?.id;
 
@@ -268,8 +269,18 @@ export default function BacklogPage() {
       await api.delete(`/sprints/${sprint.id}`);
       setSprints(p => p.filter(s => s.id !== sprint.id));
       if (selectedSprintId === sprint.id) setSelectedSprintId(null);
+      setEditingSprint({});
       await load(true);
     } catch (err) { alert(err.response?.data?.error || 'Failed to delete sprint'); }
+  };
+
+  // Patch a single field on the selected sprint (auto-save on blur/change)
+  const patchSprint = async (field, value) => {
+    if (!selectedSprintId) return;
+    try {
+      const { data } = await api.patch(`/sprints/${selectedSprintId}`, { [field]: value });
+      setSprints(p => p.map(s => s.id === data.id ? { ...s, ...data } : s));
+    } catch (err) { alert('Failed to save sprint: ' + (err.response?.data?.error || err.message)); }
   };
 
   const filteredBacklog = backlog.filter(t => {
@@ -386,24 +397,98 @@ export default function BacklogPage() {
             ))}
           </div>
 
-          {/* Sprint header */}
+          {/* Sprint header — with inline editing */}
           {selectedSprint ? (
-            <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-elevated)' }}>
+            <div style={{ padding: '10px 18px 12px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-elevated)' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                    <span style={{ fontWeight: 700, fontSize: 15 }}>{selectedSprint.name}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+
+                  {/* Sprint name — inline editable */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    {canManage && selectedSprint.status !== 'completed' ? (
+                      <input
+                        style={{
+                          fontWeight: 700, fontSize: 15, background: 'transparent',
+                          border: '1px dashed transparent', borderRadius: 4, color: 'var(--text-primary)',
+                          padding: '2px 6px', margin: '-2px -6px', width: '100%', maxWidth: 300,
+                        }}
+                        defaultValue={selectedSprint.name}
+                        key={selectedSprint.id + '-name'}
+                        onBlur={e => { if (e.target.value.trim() && e.target.value !== selectedSprint.name) patchSprint('name', e.target.value.trim()); }}
+                        onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+                        onFocus={e => { e.target.style.borderColor = 'var(--accent-purple)'; e.target.style.background = 'var(--bg-secondary)'; }}
+                        onBlurCapture={e => { e.target.style.borderColor = 'transparent'; e.target.style.background = 'transparent'; }}
+                        placeholder="Sprint name"
+                        title="Click to edit sprint name"
+                      />
+                    ) : (
+                      <span style={{ fontWeight: 700, fontSize: 15 }}>{selectedSprint.name}</span>
+                    )}
                     <SprintBadge status={selectedSprint.status} />
                   </div>
-                  {selectedSprint.goal && (
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>🎯 {selectedSprint.goal}</div>
-                  )}
-                  {selectedSprint.start_date && (
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                      {new Date(selectedSprint.start_date).toLocaleDateString()} → {selectedSprint.end_date ? new Date(selectedSprint.end_date).toLocaleDateString() : 'No end date'}
-                    </div>
-                  )}
+
+                  {/* Sprint goal — inline editable */}
+                  {canManage && selectedSprint.status !== 'completed' ? (
+                    <input
+                      style={{
+                        fontSize: 12, background: 'transparent',
+                        border: '1px dashed transparent', borderRadius: 4,
+                        color: 'var(--text-secondary)', padding: '2px 6px', margin: '-2px -6px',
+                        width: '100%', marginBottom: 6,
+                      }}
+                      defaultValue={selectedSprint.goal || ''}
+                      key={selectedSprint.id + '-goal'}
+                      placeholder="🎯 Click to add a sprint goal..."
+                      onBlur={e => { if (e.target.value !== (selectedSprint.goal || '')) patchSprint('goal', e.target.value); }}
+                      onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+                      onFocus={e => { e.target.style.borderColor = 'var(--accent-purple)'; e.target.style.background = 'var(--bg-secondary)'; }}
+                      onBlurCapture={e => { e.target.style.borderColor = 'transparent'; e.target.style.background = 'transparent'; }}
+                      title="Click to edit sprint goal"
+                    />
+                  ) : selectedSprint.goal ? (
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>🎯 {selectedSprint.goal}</div>
+                  ) : null}
+
+                  {/* Start & End dates — always visible, editable */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>📅 Start:</span>
+                    {canManage && selectedSprint.status !== 'completed' ? (
+                      <input
+                        type="date"
+                        style={{
+                          fontSize: 11, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+                          borderRadius: 5, color: selectedSprint.start_date ? 'var(--accent-purple)' : 'var(--text-muted)',
+                          padding: '2px 6px', cursor: 'pointer',
+                        }}
+                        defaultValue={selectedSprint.start_date || ''}
+                        key={selectedSprint.id + '-start'}
+                        onChange={e => patchSprint('start_date', e.target.value)}
+                        title="Sprint start date"
+                      />
+                    ) : (
+                      <span style={{ fontSize: 11, color: 'var(--accent-purple)' }}>{selectedSprint.start_date ? new Date(selectedSprint.start_date).toLocaleDateString() : 'Not set'}</span>
+                    )}
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>End:</span>
+                    {canManage && selectedSprint.status !== 'completed' ? (
+                      <input
+                        type="date"
+                        style={{
+                          fontSize: 11, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+                          borderRadius: 5, color: selectedSprint.end_date ? 'var(--accent-purple)' : 'var(--text-muted)',
+                          padding: '2px 6px', cursor: 'pointer',
+                        }}
+                        defaultValue={selectedSprint.end_date || ''}
+                        key={selectedSprint.id + '-end'}
+                        onChange={e => patchSprint('end_date', e.target.value)}
+                        title="Sprint end date"
+                      />
+                    ) : (
+                      <span style={{ fontSize: 11, color: 'var(--accent-purple)' }}>{selectedSprint.end_date ? new Date(selectedSprint.end_date).toLocaleDateString() : 'Not set'}</span>
+                    )}
+                  </div>
                 </div>
+
+                {/* Actions */}
                 {canManage && (
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     {selectedSprint.status === 'planning' && (
@@ -421,6 +506,7 @@ export default function BacklogPage() {
                   </div>
                 )}
               </div>
+
               {/* Hours progress bar */}
               {totalHours > 0 && (
                 <div style={{ marginTop: 10 }}>
