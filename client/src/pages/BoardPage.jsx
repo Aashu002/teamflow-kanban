@@ -38,6 +38,7 @@ export default function BoardPage() {
   const [filterPriority, setFilterPriority] = useState('all');
   const [filterAssignee, setFilterAssignee] = useState('all');
   const [filterType, setFilterType] = useState('all');
+  const [groupBy, setGroupBy] = useState('none');
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -111,7 +112,10 @@ export default function BoardPage() {
   const handleDragEnd = async ({ active, over }) => {
     setActiveTask(null);
     if (!over) return;
-    const targetCol = over.id;
+    
+    // Default format is "statusId". But Swimlanes use "statusId|groupId"
+    const targetCol = String(over.id).split('|')[0];
+    
     const task = tasks.find(t => t.id === active.id);
     if (!task || task.status === targetCol) return;
 
@@ -142,7 +146,6 @@ export default function BoardPage() {
   const canEditProject = isAdmin || project?.owner_id === user?.id;
   const SPRINT_STATUS_COLOR = { planning: '#8b5cf6', active: '#10b981', completed: '#6b7280' };
 
-  // Sprint-filtered board tasks: if there's an active sprint, only show its tasks on the board
   const sprintFilteredTasks = activeSprint
     ? filteredTasks.filter(t => t.sprint_id === activeSprint.id || t.status === 'backlog')
     : filteredTasks;
@@ -150,6 +153,53 @@ export default function BoardPage() {
   const boardTasks = sprintFilteredTasks.filter(t => t.status !== 'backlog');
   const backlogTasks = filteredTasks.filter(t => t.status === 'backlog');
   const tasksByCol = col => boardTasks.filter(t => t.status === col);
+
+  // Grouping logic for swimlanes
+  const getSwimlanes = () => {
+    if (groupBy === 'none') return [{ id: 'all', title: '', tasks: boardTasks }];
+    
+    const groupsMap = new Map();
+    const otherTasks = [];
+
+    boardTasks.forEach(t => {
+      // Find direct parent
+      let groupTask = t.parent_id ? tasks.find(pt => pt.id === t.parent_id) : null;
+      let matched = false;
+
+      // Ensure the parent matches the groupBy type (e.g. searching for Epic vs Story)
+      if (groupTask && groupTask.task_type === groupBy) {
+        matched = true;
+      } else if (groupBy === 'epic' && groupTask?.task_type === 'story' && groupTask.parent_id) {
+        // If grouping by epic, but direct parent is a story, resolve the story's parent (grandparent) 
+        const grandParent = tasks.find(pt => pt.id === groupTask.parent_id);
+        if (grandParent && grandParent.task_type === 'epic') {
+          groupTask = grandParent;
+          matched = true;
+        }
+      }
+
+      if (matched && groupTask) {
+        if (!groupsMap.has(groupTask.id)) {
+          groupsMap.set(groupTask.id, {
+            id: String(groupTask.id),
+            title: `${TYPE_META[groupBy]?.icon || ''} ${groupTask.key_prefix}-${groupTask.task_number}: ${groupTask.title}`,
+            tasks: []
+          });
+        }
+        groupsMap.get(groupTask.id).tasks.push(t);
+      } else {
+        otherTasks.push(t);
+      }
+    });
+
+    const lanes = Array.from(groupsMap.values());
+    if (otherTasks.length > 0) {
+      lanes.push({ id: 'other', title: groupBy === 'epic' ? 'Other Issues (No Epic)' : 'Other Issues (No Story)', tasks: otherTasks });
+    }
+    return lanes;
+  };
+
+  const swimlanes = getSwimlanes();
 
   return (
     <div className="board-page">
@@ -202,6 +252,15 @@ export default function BoardPage() {
         >
           📋 Sprints {activeSprint ? <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} /> : <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#6b7280', display: 'inline-block' }} />}
         </button>
+
+        <div className="board-filter-group" style={{ marginLeft: 8 }}>
+          <span className="board-filter-label">Group By:</span>
+          <select className="board-filter-select" style={{ fontWeight: 600 }} value={groupBy} onChange={e => setGroupBy(e.target.value)}>
+            <option value="none">None</option>
+            <option value="epic">Epic</option>
+            <option value="story">Story</option>
+          </select>
+        </div>
 
         <div className="board-filter-group">
           <span className="board-filter-label">Type:</span>
@@ -273,15 +332,28 @@ export default function BoardPage() {
       <div className="board-content">
         {viewMode === 'board' ? (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className="board-container">
-              {COLUMNS.map((col, i) => (
-                <KanbanColumn
-                  key={col.id}
-                  col={col}
-                  tasks={tasksByCol(col.id)}
-                  style={{ animationDelay: `${i * 40}ms` }}
-                  onAddTask={() => setCreateInColumn(col.id)}
-                />
+            <div className="board-container" style={{ display: 'flex', flexDirection: 'column', overflowX: 'auto', gap: groupBy !== 'none' ? 32 : 0 }}>
+              {swimlanes.map(lane => (
+                <div key={lane.id} className="swimlane">
+                  {lane.title && (
+                    <div className="swimlane-header">
+                      {lane.title}
+                      <span className="swimlane-count">{lane.tasks.length} issues</span>
+                    </div>
+                  )}
+                  <div className="swimlane-columns" style={{ display: 'flex', gap: 16 }}>
+                    {COLUMNS.map((col, i) => (
+                      <KanbanColumn
+                        key={`${lane.id}-${col.id}`}
+                        col={col}
+                        tasks={lane.tasks.filter(t => t.status === col.id)}
+                        droppableId={`${col.id}|${lane.id}`}
+                        style={{ animationDelay: `${i * 40}ms` }}
+                        onAddTask={() => setCreateInColumn(col.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
             <DragOverlay>

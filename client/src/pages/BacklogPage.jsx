@@ -167,6 +167,7 @@ export default function BacklogPage() {
   const [filterType, setFilterType] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
   const [editingSprint, setEditingSprint] = useState({}); // local edits before save
+  const [activeTab, setActiveTab] = useState('planning'); // 'planning' | 'reports'
 
   const canManage = isAdmin || project?.owner_id === user?.id;
 
@@ -299,8 +300,14 @@ export default function BacklogPage() {
     <div className="board-page">
       {/* Toolbar */}
       <div className="board-toolbar">
-        <span className="board-toolbar-title">📋 Project Backlog</span>
-        <span className="board-task-count">{backlog.length} unassigned · {sprints.length} sprint{sprints.length !== 1 ? 's' : ''}</span>
+        <div className="admin-tabs" style={{ background: 'var(--bg-secondary)', padding: 4, borderRadius: 8, marginRight: 16 }}>
+          <button className={`admin-tab ${activeTab === 'planning' ? 'active' : ''}`} style={{ padding: '6px 16px' }} onClick={() => setActiveTab('planning')}>📋 Planning</button>
+          <button className={`admin-tab ${activeTab === 'reports' ? 'active' : ''}`} style={{ padding: '6px 16px' }} onClick={() => setActiveTab('reports')}>📈 Reports & History</button>
+        </div>
+        
+        {activeTab === 'planning' && (
+          <span className="board-task-count">{backlog.length} unassigned · {sprints.filter(s => s.status !== 'completed').length} active sprint{sprints.filter(s => s.status !== 'completed').length !== 1 ? 's' : ''}</span>
+        )}
         <div style={{ flex: 1 }} />
         <div className="board-filter-group">
           <span className="board-filter-label">Type:</span>
@@ -322,15 +329,73 @@ export default function BacklogPage() {
             <option value="low">🟢 Low</option>
           </select>
         </div>
-        {canManage && (
+        {canManage && activeTab === 'planning' && (
           <button className="btn btn-primary btn-sm" style={{ marginLeft: 8 }} onClick={() => setShowCreateSprint(true)}>
             + New Sprint
           </button>
         )}
       </div>
 
-      {/* Two column layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', height: 'calc(100vh - 112px)', overflow: 'hidden' }}>
+      {activeTab === 'reports' ? (
+        <div style={{ padding: '32px 40px', maxWidth: 1000, margin: '0 auto' }}>
+          <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 24 }}>Sprint History</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {sprints.filter(s => s.status === 'completed').length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 12 }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>🕸️</div>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>No completed sprints yet</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Completed sprints will appear here along with their velocity reports.</div>
+              </div>
+            ) : (
+              sprints.filter(s => s.status === 'completed').map(sprint => {
+                const totalHours = sprint.total_hours || 0;
+                const completedHours = sprint.completed_hours || 0;
+                const pct = totalHours > 0 ? Math.round((completedHours / totalHours) * 100) : 0;
+                
+                return (
+                  <div key={sprint.id} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 12, padding: 24 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+                          <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>{sprint.name}</h3>
+                          <SprintBadge status={sprint.status} />
+                        </div>
+                        {sprint.goal && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>🎯 {sprint.goal}</div>}
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+                          {sprint.start_date ? new Date(sprint.start_date).toLocaleDateString() : 'Unknown'} – {sprint.end_date ? new Date(sprint.end_date).toLocaleDateString() : 'Unknown'}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444' }}>
+                          {pct}%
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Delivery</div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ background: 'var(--bg-elevated)', padding: '16px 20px', borderRadius: 8, display: 'flex', gap: 32 }}>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Estimated</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{totalHours}h</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Completed</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>{completedHours}h</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Total Issues</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{sprint.task_count || 0}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Two column layout for Planning */
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', height: 'calc(100vh - 112px)', overflow: 'hidden' }}>
 
         {/* ── LEFT: Project Backlog ── */}
         <div
@@ -372,11 +437,11 @@ export default function BacklogPage() {
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {/* Sprint tabs */}
           <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border-color)', overflowX: 'auto', whiteSpace: 'nowrap' }}>
-            {sprints.length === 0 ? (
+            {sprints.filter(s => s.status !== 'completed').length === 0 ? (
               <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-                No sprints yet.{canManage && ' Click "+ New Sprint" to create one.'}
+                No active or planning sprints.{canManage && ' Click "+ New Sprint" to create one.'}
               </span>
-            ) : sprints.map(s => (
+            ) : sprints.filter(s => s.status !== 'completed').map(s => (
               <button
                 key={s.id}
                 onClick={() => setSelectedSprintId(s.id)}
@@ -557,6 +622,7 @@ export default function BacklogPage() {
           </div>
         </div>
       </div>
+      )}
 
       {showCreateSprint && (
         <CreateSprintModal

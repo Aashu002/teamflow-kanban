@@ -20,12 +20,12 @@ function parentLabel(type) {
   return 'Parent ' + allowed.map(t => map[t]).join(' / ');
 }
 
-export default function CreateTaskModal({ defaultStatus, projectId, members, onClose, onCreated, allTasks = [], sprints = [] }) {
+export default function CreateTaskModal({ defaultStatus, projectId, members, onClose, onCreated, allTasks = [], sprints = [], initialParentId, initialType }) {
   const { toast } = useToast();
   const activeSprint = sprints.find(s => s.status === 'active');
   const [form, setForm] = useState({
-    title: '', description: '', status: defaultStatus,
-    priority: 'medium', task_type: 'task', assigneeId: '', parentId: '',
+    title: '', description: '', status: defaultStatus || 'backlog',
+    priority: 'medium', task_type: initialType || 'task', assigneeId: '', parentId: initialParentId || '',
     sprint_id: activeSprint?.id || ''
   });
   const [error, setError] = useState('');

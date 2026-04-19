@@ -8,6 +8,7 @@ import { COLUMNS } from './BoardPage.jsx';
 import api from '../api.js';
 import { socket } from '../socket.js';
 import { useNavbar } from '../contexts/NavbarContext.jsx';
+import CreateTaskModal from '../components/CreateTaskModal.jsx';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -474,6 +475,7 @@ export default function TaskDetailPage() {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
+  const [showCreateChildModal, setShowCreateChildModal] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -643,6 +645,12 @@ export default function TaskDetailPage() {
     } catch {}
   };
 
+  const getChildType = (parentType) => {
+    if (parentType === 'epic') return 'story';
+    if (parentType === 'story') return 'task';
+    return 'subtask';
+  };
+
   if (loading) return <div className="loading-screen"><div className="loading-spinner" /></div>;
   if (!task)   return null;
 
@@ -673,7 +681,7 @@ export default function TaskDetailPage() {
               onClick={() => navigate(`/projects/${projectId}/board`)}
               title="Back to board"
             >
-              {task.key_prefix}
+              📋 {task.key_prefix}
             </span>
             {task.parent_id && task.parent_title && (
               <>
@@ -682,12 +690,12 @@ export default function TaskDetailPage() {
                   className="td-crumb td-crumb--link"
                   onClick={() => navigate(`/projects/${projectId}/tasks/${task.parent_key_prefix}-${task.parent_task_number}`)}
                 >
-                  {task.parent_key_prefix}-{task.parent_task_number}
+                  {TYPE_META[task.parent_task_type]?.icon} {task.parent_key_prefix}-{task.parent_task_number}
                 </span>
               </>
             )}
             <span className="td-crumb-arrow">›</span>
-            <span className="td-crumb td-crumb--current">{task.key_prefix}-{task.task_number}</span>
+            <span className="td-crumb td-crumb--current">{tm.icon} {task.key_prefix}-{task.task_number}</span>
           </nav>
 
           {/* Title */}
@@ -824,6 +832,50 @@ export default function TaskDetailPage() {
                 {task.description
                   ? <div className="markdown-body"><ReactMarkdown>{String(task.description || '')}</ReactMarkdown></div>
                   : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No description. Click to add one.</span>}
+              </div>
+            )}
+          </div>
+
+          {/* ── Child Issues / Subtasks ── */}
+          <div className="td-section">
+            <h3 className="td-section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>
+                Child Issues
+                {task.subtasks?.length > 0 && <span className="td-count">{task.subtasks.length}</span>}
+              </span>
+              {canEdit && (
+                <button className="btn btn-ghost btn-sm" style={{ fontWeight: 600, color: 'var(--accent-purple)' }} onClick={() => setShowCreateChildModal(true)}>
+                  + Add Child
+                </button>
+              )}
+            </h3>
+            
+            {task.subtasks?.length > 0 ? (
+              <div className="td-subtask-list">
+                {task.subtasks.map(st => {
+                  const stm = TYPE_META[st.task_type] || TYPE_META.task;
+                  const stc = COLUMNS.find(c => c.id === st.status);
+                  return (
+                    <div key={st.id} className="td-subtask-item">
+                      <span className="td-subtask-type" style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${projectId}/tasks/${st.key_prefix}-${st.task_number}`)}>{stm.icon}</span>
+                      <span className="task-id" style={{ color: 'var(--accent-purple)', cursor: 'pointer' }} onClick={() => navigate(`/projects/${projectId}/tasks/${st.key_prefix}-${st.task_number}`)}>{st.key_prefix}-{st.task_number}</span>
+                      <span className="td-subtask-title" style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${projectId}/tasks/${st.key_prefix}-${st.task_number}`)}>{st.title}</span>
+                      {st.assignee_name && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', marginRight: 12 }}>
+                          <Avatar name={st.assignee_name} color={st.assignee_color} size={20} />
+                          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{st.assignee_name.split(' ')[0]}</span>
+                        </div>
+                      )}
+                      <span style={{ marginLeft: st.assignee_name ? 0 : 'auto', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 4 }}>
+                        {stc?.label || st.status}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ padding: '16px', borderRadius: 8, background: 'var(--bg-elevated)', border: '1px dashed var(--border)', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                No child issues attached.
               </div>
             )}
           </div>
@@ -1167,6 +1219,20 @@ export default function TaskDetailPage() {
           task={task}
           onMoved={(t) => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`, { replace: true })}
           onClose={() => setShowMoveModal(false)}
+        />
+      )}
+
+      {showCreateChildModal && (
+        <CreateTaskModal
+          projectId={projectId}
+          members={users}
+          allTasks={[task]} 
+          initialParentId={task.id}
+          initialType={getChildType(task.task_type)}
+          onClose={() => setShowCreateChildModal(false)}
+          onCreated={(newTask) => {
+            setTask(prev => ({ ...prev, subtasks: [...(prev.subtasks || []), newTask] }));
+          }}
         />
       )}
     </div>

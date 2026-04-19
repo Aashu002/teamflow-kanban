@@ -2,8 +2,8 @@ import React from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import TaskCard from './TaskCard.jsx';
 
-export default function KanbanColumn({ col, tasks, style, onAddTask }) {
-  const { setNodeRef, isOver } = useDroppable({ id: col.id });
+export default function KanbanColumn({ col, tasks, style, onAddTask, droppableId }) {
+  const { setNodeRef, isOver } = useDroppable({ id: droppableId || col.id });
 
   return (
     <div className="kanban-column" style={style}>

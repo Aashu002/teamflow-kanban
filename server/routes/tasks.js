@@ -37,7 +37,7 @@ async function selectTask(id) {
       p.key_prefix, p.owner_id as project_owner_id,
       creator.name as creator_name, creator.avatar_color as creator_color,
       assignee.name as assignee_name, assignee.avatar_color as assignee_color,
-      parent.title as parent_title, parent.task_number as parent_task_number,
+      parent.title as parent_title, parent.task_number as parent_task_number, parent.task_type as parent_task_type,
       parent_proj.key_prefix as parent_key_prefix
     FROM tasks t
     LEFT JOIN projects p ON p.id = t.project_id
