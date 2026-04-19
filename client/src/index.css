@@ -878,7 +878,8 @@ body {
 
 /* ─── Kanban Columns ─────────────────────────────────────────────────── */
 .kanban-column {
-  flex: 1;
+  flex: 1 1 0px;
+  width: 100%;
   min-width: 0;
   background: var(--bg-surface);
   border: 1px solid var(--border);
@@ -2531,6 +2532,7 @@ body {
   display: flex;
   flex-direction: column;
   position: relative;
+  width: 100%;
 }
 .swimlane-header {
   font-size: 15px;
