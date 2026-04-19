@@ -54,7 +54,7 @@ function DonutChart({ statusCounts = [], totalTickets = 0 }) {
     id:    col.id,
     label: col.label,
     color: col.color,
-    count: statusCounts.find(s => s.status === col.id)?.count || 0,
+    count: parseInt(statusCounts.find(s => s.status === col.id)?.count || 0, 10),
   })).filter(d => d.count > 0);
 
   const total = data.reduce((s, d) => s + d.count, 0) || 1;
@@ -65,7 +65,10 @@ function DonutChart({ statusCounts = [], totalTickets = 0 }) {
   const segments = (() => {
     let angle = -Math.PI / 2;
     return data.map(d => {
-      const sweep = (d.count / total) * 2 * Math.PI;
+      let sweep = (d.count / total) * 2 * Math.PI;
+      // SVG arcs fail to render if start and end points overlap identically
+      if (sweep >= 2 * Math.PI) sweep = 2 * Math.PI - 0.0001;
+      
       const start = angle;
       const end   = angle + sweep;
       angle = end;
