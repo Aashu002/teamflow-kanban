@@ -911,34 +911,6 @@ export default function TaskDetailPage() {
             )}
           </div>
 
-          {/* ── Subtasks ── */}
-          {task.subtasks?.length > 0 && (
-            <div className="td-section">
-              <h3 className="td-section-title">
-                Subtasks <span className="td-count">{task.subtasks.length}</span>
-              </h3>
-              <div className="td-subtask-list">
-                {task.subtasks.map(s => {
-                  const sm = TYPE_META[s.task_type] || TYPE_META.task;
-                  const sc = COLUMNS.find(c => c.id === s.status);
-                  return (
-                    <div key={s.id} className="td-subtask-item"
-                      onClick={() => navigate(`/projects/${projectId}/tasks/${s.key_prefix}-${s.task_number}`)}>
-                      <span className="td-subtask-type">{sm.icon}</span>
-                      <span className="task-id" style={{ color: 'var(--accent-purple)' }}>{s.key_prefix}-{s.task_number}</span>
-                      <span className="td-subtask-title">{s.title}</span>
-                      <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600,
-                        color: 'var(--text-muted)', background: 'var(--bg-elevated)',
-                        padding: '2px 8px', borderRadius: 4 }}>
-                        {sc?.label || s.status}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           {/* ── Activity / Comments ── */}
           <div className="td-section">
             <h3 className="td-section-title">
