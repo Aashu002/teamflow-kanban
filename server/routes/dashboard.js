@@ -130,8 +130,10 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
   // ── 4. Velocity: created vs completed ─
   const chartStart = startDate ? new Date(startDate) : new Date(Date.now() - 6 * 24 * 60 * 60 * 1000);
   const chartEnd   = endDate   ? new Date(endDate)   : new Date();
+  
+  // Normalize both to start/end of day for range extraction
   const startIso   = chartStart.toISOString().split('T')[0];
-  const endIso     = chartEnd.toISOString().split('T')[0];
+  const endIso     = chartEnd.toISOString().split('T')[1]?.includes('00:00:00') ? chartEnd.toISOString().split('T')[0] : new Date(chartEnd.getTime() + 1000).toISOString().split('T')[0];
 
   const createdByDay = isAdmin
     ? await db.prepare(`SELECT t.created_at::date as day, COUNT(*) as count FROM tasks t WHERE t.created_at::date BETWEEN ? AND ? ${projectFilter ? 'AND t.project_id = ?' : ''} GROUP BY t.created_at::date`).all(...(projectFilter ? [startIso, endIso, projectFilter] : [startIso, endIso]))
@@ -143,11 +145,12 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
 
   // Build days array for chart
   const days = [];
-  let currStep = new Date(chartStart);
-  currStep.setHours(12, 0, 0, 0); // avoid DST issues
-  while (currStep <= chartEnd) {
+  let currStep = new Date(startIso + 'T00:00:00Z');
+  const endLimit = new Date(endIso + 'T23:59:59Z');
+  
+  while (currStep <= endLimit) {
     days.push(currStep.toISOString().split('T')[0]);
-    currStep.setDate(currStep.getDate() + 1);
+    currStep.setUTCDate(currStep.getUTCDate() + 1);
     if (days.length > 90) break; // Safety
   }
 
