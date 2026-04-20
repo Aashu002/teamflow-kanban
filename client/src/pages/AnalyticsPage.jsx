@@ -38,7 +38,7 @@ function ChartModal({ filter, onClose }) {
           ) : (
             <table className="data-table" style={{ width: '100%', tableLayout: 'fixed' }}>
               <colgroup>
-                <col style={{ width: 100 }}/><col/><col style={{ width: 100 }}/><col style={{ width: 100 }}/><col style={{ width: 120 }}/>
+                <col style={{ width: 100 }}/><col/><col style={{ width: 110 }}/><col style={{ width: 100 }}/><col style={{ width: 120 }}/>
               </colgroup>
               <thead>
                 <tr><th>ID</th><th>Title</th><th>Type</th><th>Priority</th><th>Assignee</th></tr>
@@ -50,8 +50,12 @@ function ChartModal({ filter, onClose }) {
                     <tr key={t.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)}>
                       <td><span className="task-id" style={{ color: 'var(--accent-purple)' }}>{t.key_prefix}-{t.task_number}</span></td>
                       <td style={{ fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.title}</td>
-                      <td><span className={`type-badge type-${t.task_type}`}>{tm.icon} {tm.label}</span></td>
-                      <td><span className={`priority-badge priority-${t.priority}`} style={{ textTransform: 'uppercase' }}>{t.priority}</span></td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`type-badge type-${t.task_type}`}>{tm.icon} {tm.label}</span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`priority-badge priority-${t.priority}`} style={{ textTransform: 'uppercase' }}>{t.priority}</span>
+                      </td>
                       <td style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.assignee_name || 'Unassigned'}</td>
                     </tr>
                   )

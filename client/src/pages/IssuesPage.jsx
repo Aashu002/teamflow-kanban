@@ -178,7 +178,7 @@ export default function IssuesPage() {
                       {t.project_name}
                     </td>
                     <td style={{ textAlign: 'center' }}>
-                      <span className={`type-badge type-${t.task_type}`} style={{ textTransform: 'uppercase', fontSize: 9, fontWeight: 700, padding: '4px 8px', borderRadius: 4, whiteSpace: 'nowrap' }}>
+                      <span className={`type-badge type-${t.task_type}`}>
                         {tm.icon} {tm.label}
                       </span>
                     </td>

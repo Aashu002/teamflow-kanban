@@ -201,7 +201,7 @@ function DonutChart({ statusCounts = [], totalTickets = 0, tasks = [] }) {
               ) : (
                 <table className="data-table" style={{ width: '100%' }}>
                   <thead>
-                    <tr><th style={{ width: 90 }}>ID</th><th>Title</th><th style={{ width: 90 }}>Priority</th><th style={{ width: 80 }}>Type</th></tr>
+                    <tr><th style={{ width: 90 }}>ID</th><th>Title</th><th style={{ width: 100 }}>Priority</th><th style={{ width: 110 }}>Type</th></tr>
                   </thead>
                   <tbody>
                     {popupTasks.map(t => {
@@ -212,8 +212,12 @@ function DonutChart({ statusCounts = [], totalTickets = 0, tasks = [] }) {
                         >
                           <td><span className="task-id" style={{ color: 'var(--accent-purple)' }}>{t.key_prefix}-{t.task_number}</span></td>
                           <td style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{t.title}</td>
-                          <td><span className={`priority-badge priority-${t.priority}`}>{t.priority}</span></td>
-                          <td><span className={`type-badge type-${t.task_type}`}>{tm.icon} {tm.label}</span></td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className={`priority-badge priority-${t.priority}`} style={{ textTransform: 'uppercase' }}>{t.priority}</span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className={`type-badge type-${t.task_type}`}>{tm.icon} {tm.label}</span>
+                          </td>
                         </tr>
                       );
                     })}
