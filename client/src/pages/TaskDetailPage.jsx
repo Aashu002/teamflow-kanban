@@ -1100,25 +1100,25 @@ export default function TaskDetailPage() {
                 Est. Completion
               </div>
               {(isAssignee || isAdmin) ? (
-                editingEst ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <input type="date" className="td-side-input" style={{ flex: 1 }}
-                        value={estDate} onChange={e => setEstDate(e.target.value)} />
-                      <input type="time" className="td-side-input" style={{ flex: 1 }}
-                        value={estTime} onChange={e => setEstTime(e.target.value)} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <input
+                    type="datetime-local"
+                    className="td-side-input"
+                    style={{ width: '100%', fontSize: 12 }}
+                    value={estDate && estTime ? `${estDate}T${estTime}` : estDate ? `${estDate}T00:00` : ''}
+                    onChange={e => {
+                      const [d, t] = e.target.value.split('T');
+                      setEstDate(d || '');
+                      setEstTime(t || '');
+                    }}
+                    onBlur={saveEstimated}
+                  />
+                  {estDisplay && (
+                    <div style={{ fontSize: 11, color: 'var(--accent-purple)', marginTop: 2 }}>
+                      📅 {estDisplay}
                     </div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={saveEstimated}>Save</button>
-                      <button className="btn btn-ghost btn-sm"   style={{ flex: 1 }} onClick={() => setEditingEst(false)}>Cancel</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="td-est-pill" onClick={() => setEditingEst(true)}
-                    title="Click to set estimated completion">
-                    {estDisplay || '+ Set completion date'}
-                  </div>
-                )
+                  )}
+                </div>
               ) : (
                 <div style={{ fontSize: 12, color: estDisplay ? 'var(--text-primary)' : 'var(--text-muted)' }}>
                   {estDisplay || '—'}

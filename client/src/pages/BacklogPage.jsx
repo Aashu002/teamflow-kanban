@@ -169,6 +169,9 @@ export default function BacklogPage() {
   const [editingSprint, setEditingSprint] = useState({}); // local edits before save
   const [activeTab, setActiveTab] = useState('planning'); // 'planning' | 'reports'
 
+  // Reset local draft when switching between sprints so stale date values don't carry over
+  useEffect(() => { setEditingSprint({}); }, [selectedSprintId]);
+
   const canManage = isAdmin || project?.owner_id === user?.id;
 
   const load = useCallback(async (keepSelection = false) => {
@@ -289,6 +292,8 @@ export default function BacklogPage() {
   // Patch a single field on the selected sprint (auto-save on blur/change)
   const patchSprint = async (field, value) => {
     if (!selectedSprintId) return;
+    // Optimistically update local state so input doesn't reset
+    setEditingSprint(prev => ({ ...prev, [field]: value }));
     try {
       const { data } = await api.patch(`/sprints/${selectedSprintId}`, { [field]: value });
       setSprints(p => p.map(s => s.id === data.id ? { ...s, ...data } : s));
@@ -533,12 +538,12 @@ export default function BacklogPage() {
                         type="date"
                         style={{
                           fontSize: 11, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
-                          borderRadius: 5, color: selectedSprint.start_date ? 'var(--accent-purple)' : 'var(--text-muted)',
+                          borderRadius: 5, color: (editingSprint.start_date || selectedSprint.start_date) ? 'var(--accent-purple)' : 'var(--text-muted)',
                           padding: '2px 6px', cursor: 'pointer',
                         }}
-                        defaultValue={selectedSprint.start_date || ''}
-                        key={selectedSprint.id + '-start'}
-                        onChange={e => patchSprint('start_date', e.target.value)}
+                        value={editingSprint.start_date ?? (selectedSprint.start_date ? selectedSprint.start_date.split('T')[0] : '')}
+                        onChange={e => setEditingSprint(prev => ({ ...prev, start_date: e.target.value }))}
+                        onBlur={e => { if (e.target.value) patchSprint('start_date', e.target.value); }}
                         title="Sprint start date"
                       />
                     ) : (
@@ -550,12 +555,12 @@ export default function BacklogPage() {
                         type="date"
                         style={{
                           fontSize: 11, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
-                          borderRadius: 5, color: selectedSprint.end_date ? 'var(--accent-purple)' : 'var(--text-muted)',
+                          borderRadius: 5, color: (editingSprint.end_date || selectedSprint.end_date) ? 'var(--accent-purple)' : 'var(--text-muted)',
                           padding: '2px 6px', cursor: 'pointer',
                         }}
-                        defaultValue={selectedSprint.end_date || ''}
-                        key={selectedSprint.id + '-end'}
-                        onChange={e => patchSprint('end_date', e.target.value)}
+                        value={editingSprint.end_date ?? (selectedSprint.end_date ? selectedSprint.end_date.split('T')[0] : '')}
+                        onChange={e => setEditingSprint(prev => ({ ...prev, end_date: e.target.value }))}
+                        onBlur={e => { if (e.target.value) patchSprint('end_date', e.target.value); }}
                         title="Sprint end date"
                       />
                     ) : (
