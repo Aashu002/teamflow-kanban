@@ -244,8 +244,19 @@ export default function BacklogPage() {
   const handleStartSprint = async sprint => {
     try {
       const { data } = await api.post(`/sprints/${sprint.id}/start`);
+      // Cascade sprint assignment to all children of tasks already in this sprint
+      await api.post(`/sprints/${sprint.id}/cascade-children`);
       setSprints(p => p.map(s => s.id === data.id ? data : s));
     } catch (err) { alert(err.response?.data?.error || 'Failed to start sprint'); }
+  };
+
+  // One-time fix: cascade sprint to children for already-active sprints
+  const handleCascadeChildren = async sprint => {
+    try {
+      const { data } = await api.post(`/sprints/${sprint.id}/cascade-children`);
+      alert(`✅ Fixed! ${data.childrenUpdated} child tasks added to sprint. Reload the board.`);
+      load(true);
+    } catch (err) { alert('Failed to cascade sprint to children'); }
   };
 
   const openCompleteModal = async sprint => {
@@ -563,9 +574,18 @@ export default function BacklogPage() {
                       </>
                     )}
                     {selectedSprint.status === 'active' && (
-                      <button className="btn btn-sm" style={{ background: '#10b981', color: '#fff', border: 'none' }} onClick={() => openCompleteModal(selectedSprint)}>
-                        🏁 Complete Sprint
-                      </button>
+                      <>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          title="Pull all child tasks of existing sprint items into this sprint"
+                          onClick={() => handleCascadeChildren(selectedSprint)}
+                        >
+                          🔄 Sync Child Tasks
+                        </button>
+                        <button className="btn btn-sm" style={{ background: '#10b981', color: '#fff', border: 'none' }} onClick={() => openCompleteModal(selectedSprint)}>
+                          🏁 Complete Sprint
+                        </button>
+                      </>
                     )}
                     <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/projects/${projectId}/board`)}>Board →</button>
                   </div>
