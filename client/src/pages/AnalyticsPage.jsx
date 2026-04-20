@@ -427,8 +427,8 @@ export default function AnalyticsPage() {
             <h3 style={{ margin: '0 0 24px 0', fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>
               Velocity ({dateRangeType === '7d' ? 'Last 7 Days' : dateRangeType === '30d' ? 'Last 30 Days' : 'Custom Range'})
             </h3>
-            <div style={{ width: '100%', height: 300 }}>
-              <ResponsiveContainer>
+            <div style={{ width: '100%', height: 300, minHeight: 300 }}>
+              <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={burndown} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorCreated" x1="0" y1="0" x2="0" y2="1">
@@ -460,8 +460,8 @@ export default function AnalyticsPage() {
             {hourStats.length === 0 ? (
               <div style={{ textAlign: 'center', color: 'var(--text-muted)', paddingTop: 50 }}>No time logged yet.</div>
             ) : (
-              <div style={{ width: '100%', height: 300 }}>
-                <ResponsiveContainer>
+              <div style={{ width: '100%', height: 300, minHeight: 300 }}>
+                <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={hourStats} margin={{ top: 10, right: 0, left: -20, bottom: 0 }} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
                     <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
@@ -597,8 +597,8 @@ export default function AnalyticsPage() {
               </div>
             ) : (
               <>
-                <div style={{ width: '100%', height: 300 }}>
-                  <ResponsiveContainer>
+                <div style={{ width: '100%', height: 300, minHeight: 300 }}>
+                  <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie 
                         data={typeData} 
@@ -641,8 +641,8 @@ export default function AnalyticsPage() {
               <div style={{ textAlign: 'center', color: 'var(--text-muted)', paddingTop: 50 }}>No data available.</div>
             ) : (
               <>
-                <div style={{ width: '100%', height: 300 }}>
-                  <ResponsiveContainer>
+                <div style={{ width: '100%', height: 300, minHeight: 300 }}>
+                  <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie 
                         data={statusData} 
