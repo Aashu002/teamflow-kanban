@@ -162,12 +162,13 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
     completed: parseInt(completedMap[day] || 0),
   }));
 
-  // ── 5. My Issues by Status/Priority/Type (assigned to me) ─────────────────────────────
+  // ── 5. Project/Global Stats (Admins see all, Members see project-wide) ──────────
   const rawStatusCounts = isAdmin
     ? await db.prepare(`SELECT status, COUNT(*) as count FROM tasks WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY status`).all(...(projectFilter ? [projectFilter] : []))
     : await db.prepare(`
         SELECT t.status, COUNT(*) as count FROM tasks t
-        WHERE t.assignee_id = ? ${projectFilter ? 'AND t.project_id = ?' : ''}
+        INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
+        WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''}
         GROUP BY t.status
       `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
 
@@ -178,7 +179,8 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
     ? await db.prepare(`SELECT priority, COUNT(*) as count FROM tasks WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY priority`).all(...(projectFilter ? [projectFilter] : []))
     : await db.prepare(`
         SELECT t.priority, COUNT(*) as count FROM tasks t
-        WHERE t.assignee_id = ? ${projectFilter ? 'AND t.project_id = ?' : ''}
+        INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
+        WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''}
         GROUP BY t.priority
       `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
 
@@ -186,9 +188,22 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
     ? await db.prepare(`SELECT task_type, COUNT(*) as count FROM tasks WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY task_type`).all(...(projectFilter ? [projectFilter] : []))
     : await db.prepare(`
         SELECT t.task_type, COUNT(*) as count FROM tasks t
-        WHERE t.assignee_id = ? ${projectFilter ? 'AND t.project_id = ?' : ''}
+        INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
+        WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''}
         GROUP BY t.task_type
       `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
+
+  // ── 6. Personal Stats (Assigned to Me - always scoped to user, regardless of role) ──
+  const myStatParams = projectFilter ? [userId, projectFilter] : [userId];
+  const myRawStatus = await db.prepare(`SELECT status, COUNT(*) as count FROM tasks WHERE assignee_id = ? ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY status`).all(...myStatParams);
+  const myStatusCounts = myRawStatus.map(r => ({ status: r.status, count: parseInt(r.count) }));
+  const myTotalTickets = myStatusCounts.reduce((s, r) => s + r.count, 0);
+
+  const myRawPriority = await db.prepare(`SELECT priority, COUNT(*) as count FROM tasks WHERE assignee_id = ? ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY priority`).all(...myStatParams);
+  const myPriorityCounts = myRawPriority.map(r => ({ priority: r.priority, count: parseInt(r.count) }));
+
+  const myRawType = await db.prepare(`SELECT task_type, COUNT(*) as count FROM tasks WHERE assignee_id = ? ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY task_type`).all(...myStatParams);
+  const myTypeCounts = myRawType.map(r => ({ task_type: r.task_type, count: parseInt(r.count) }));
 
   const hourStats = isAdmin
     ? await db.prepare(`
@@ -409,7 +424,8 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
 
   res.json({ 
     projects, myTasks, myOpenTasks, activity, burndown, stats, statusCounts, totalTickets, priorityCounts, typeCounts, hourStats,
-    workloadStats, accuracyStats, agingTasks, projectBurndown, projectHealth
+    workloadStats, accuracyStats, agingTasks, projectBurndown, projectHealth,
+    myStatusCounts, myTotalTickets, myPriorityCounts, myTypeCounts
   });
 }));
 

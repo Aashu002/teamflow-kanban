@@ -376,6 +376,7 @@ export default function HomePage() {
   const {
     projects = [], myTasks = [], activity = [],
     stats = {}, statusCounts = [], totalTickets = 0,
+    myStatusCounts = [], myTotalTickets = 0,
   } = data || {};
 
   const myOpenTasks = myTasks.filter(t => t.status !== 'done');
@@ -590,14 +591,14 @@ export default function HomePage() {
             <div className="dash-panel-header">
               <h3 className="dash-panel-title">
                 📊 Issues by Status
-                <span className="dash-section-count">{totalTickets} total</span>
+                <span className="dash-section-count">{myTotalTickets} total</span>
               </h3>
             </div>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16, marginTop: -8 }}>
               Your assigned issues · Click a segment to see tickets
             </p>
             <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
-              <DonutChart statusCounts={statusCounts} totalTickets={totalTickets} tasks={myTasks} />
+              <DonutChart statusCounts={myStatusCounts} totalTickets={myTotalTickets} tasks={myTasks} />
             </div>
           </div>
         </div>
