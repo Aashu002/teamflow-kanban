@@ -32,10 +32,13 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
   res.json(sprints);
 }));
 
-// POST /api/sprints/:id/cascade-children — retroactively assign sprint to all children of sprint tasks
+// POST /api/sprints/:id/cascade-children — retroactively assign sprint + fix backlog status on children
 router.post('/:id/cascade-children', authMiddleware, canManageSprints, asyncHandler(async (req, res) => {
   const sprint = await db.prepare('SELECT * FROM sprints WHERE id = ?').get(req.params.id);
   if (!sprint) return res.status(404).json({ error: 'Sprint not found' });
+
+  // Also fix ALL tasks in this sprint that still have status='backlog' (legacy data)
+  await db.prepare(`UPDATE tasks SET status = 'open' WHERE sprint_id = ? AND status = 'backlog'`).run(req.params.id);
 
   const sprintTasks = await db.prepare('SELECT id FROM tasks WHERE sprint_id = ?').all(req.params.id);
   const updatedIds = new Set();
@@ -44,13 +47,13 @@ router.post('/:id/cascade-children', authMiddleware, canManageSprints, asyncHand
     const children = await db.prepare('SELECT id FROM tasks WHERE parent_id = ?').all(t.id);
     for (const child of children) {
       if (!updatedIds.has(child.id)) {
-        await db.prepare('UPDATE tasks SET sprint_id = ? WHERE id = ?').run(req.params.id, child.id);
+        await db.prepare(`UPDATE tasks SET sprint_id = ?, status = CASE WHEN status = 'backlog' THEN 'open' ELSE status END WHERE id = ?`).run(req.params.id, child.id);
         updatedIds.add(child.id);
       }
       const grandchildren = await db.prepare('SELECT id FROM tasks WHERE parent_id = ?').all(child.id);
       for (const gc of grandchildren) {
         if (!updatedIds.has(gc.id)) {
-          await db.prepare('UPDATE tasks SET sprint_id = ? WHERE id = ?').run(req.params.id, gc.id);
+          await db.prepare(`UPDATE tasks SET sprint_id = ?, status = CASE WHEN status = 'backlog' THEN 'open' ELSE status END WHERE id = ?`).run(req.params.id, gc.id);
           updatedIds.add(gc.id);
         }
       }
@@ -169,7 +172,7 @@ router.post('/:id/tasks', authMiddleware, asyncHandler(async (req, res) => {
   }
 
   for (const id of allIds) {
-    await db.prepare('UPDATE tasks SET sprint_id = ? WHERE id = ?').run(req.params.id, id);
+    await db.prepare(`UPDATE tasks SET sprint_id = ?, status = CASE WHEN status = 'backlog' THEN 'open' ELSE status END WHERE id = ?`).run(req.params.id, id);
   }
   res.json({ success: true, count: allIds.size });
 }));
