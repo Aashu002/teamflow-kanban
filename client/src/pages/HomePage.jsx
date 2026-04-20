@@ -29,9 +29,9 @@ function greeting(name) {
 }
 
 const PRIORITY_CONFIG = {
-  high:   { icon: '🔴', label: 'High Priority',   bg: 'rgba(239,68,68,0.09)',   border: 'rgba(239,68,68,0.25)',   text: '#f87171' },
-  medium: { icon: '🟡', label: 'Medium Priority', bg: 'rgba(245,158,11,0.09)', border: 'rgba(245,158,11,0.25)', text: '#fbbf24' },
-  low:    { icon: '🟢', label: 'Low Priority',    bg: 'rgba(34,197,94,0.09)',  border: 'rgba(34,197,94,0.25)',  text: '#4ade80' },
+  high:   { icon: '🔴', label: 'HIGH PRIORITY',   bg: 'rgba(239,68,68,0.09)',   border: 'rgba(239,68,68,0.25)',   text: '#f87171' },
+  medium: { icon: '🟡', label: 'MEDIUM PRIORITY', bg: 'rgba(245,158,11,0.09)', border: 'rgba(245,158,11,0.25)', text: '#fbbf24' },
+  low:    { icon: '🟢', label: 'LOW PRIORITY',    bg: 'rgba(34,197,94,0.09)',  border: 'rgba(34,197,94,0.25)',  text: '#4ade80' },
 };
 
 const STATUS_COLORS = {
@@ -561,11 +561,11 @@ export default function HomePage() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
-                      <span className={`priority-badge priority-${t.priority}`} style={{ fontSize: 10 }}>
+                      <span className={`priority-badge priority-${t.priority}`} style={{ fontSize: 10, textTransform: 'uppercase' }}>
                         {pri?.icon} {t.priority}
                       </span>
-                      <span style={{ fontSize: 10, color: STATUS_COLORS[t.status] || 'var(--text-muted)', fontWeight: 600 }}>
-                        {col?.label || t.status}
+                      <span style={{ fontSize: 10, color: STATUS_COLORS[t.status] || 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
+                        {t.status === 'backlog' ? 'OPEN' : (col?.label || t.status)}
                       </span>
                     </div>
                   </div>

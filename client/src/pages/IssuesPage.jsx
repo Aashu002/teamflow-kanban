@@ -109,9 +109,9 @@ export default function IssuesPage() {
                 <span className="text-muted" style={{ fontSize: 13, fontWeight: 500 }}>Priority:</span>
                 <select className="form-select" style={{ width: 120, padding: '4px 8px', fontSize: 13 }} value={filterPriority} onChange={e => setFilterPriority(e.target.value)}>
                   <option value="all">All</option>
-                  <option value="high">🔴 High</option>
-                  <option value="medium">🟡 Medium</option>
-                  <option value="low">🟢 Low</option>
+                  <option value="high">🔴 HIGH</option>
+                  <option value="medium">🟡 MEDIUM</option>
+                  <option value="low">🟢 LOW</option>
                 </select>
               </div>
               {users.length > 0 && (
@@ -143,6 +143,7 @@ export default function IssuesPage() {
               <col style={{ width: 140 }}/>
               <col style={{ width: 110 }}/>
               <col/>
+              <col style={{ width: 100 }}/>
               <col style={{ width: 140 }}/>
               <col style={{ width: 130 }}/>
             </colgroup>
@@ -152,6 +153,7 @@ export default function IssuesPage() {
                 <th>Project</th>
                 <th style={{ textAlign: 'center' }}>Type</th>
                 <th>Title</th>
+                <th style={{ textAlign: 'center' }}>Priority</th>
                 <th>Assignee</th>
                 <th style={{ textAlign: 'center' }}>Status</th>
               </tr>
@@ -182,6 +184,11 @@ export default function IssuesPage() {
                     </td>
                     <td style={{ fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {t.title}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <span className={`priority-badge priority-${t.priority}`} style={{ textTransform: 'uppercase', fontSize: 10 }}>
+                        {t.priority}
+                      </span>
                     </td>
                     <td style={{ fontSize: 13, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {t.assignee_name || 'Unassigned'}

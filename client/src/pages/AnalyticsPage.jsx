@@ -51,7 +51,7 @@ function ChartModal({ filter, onClose }) {
                       <td><span className="task-id" style={{ color: 'var(--accent-purple)' }}>{t.key_prefix}-{t.task_number}</span></td>
                       <td style={{ fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.title}</td>
                       <td><span className={`type-badge type-${t.task_type}`}>{tm.icon} {tm.label}</span></td>
-                      <td><span className={`priority-badge priority-${t.priority}`}>{t.priority}</span></td>
+                      <td><span className={`priority-badge priority-${t.priority}`} style={{ textTransform: 'uppercase' }}>{t.priority}</span></td>
                       <td style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.assignee_name || 'Unassigned'}</td>
                     </tr>
                   )
@@ -137,7 +137,7 @@ export default function AnalyticsPage() {
 
   // Chart Colors
   const COLORS = ['#8b5cf6', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899'];
-  const PRIORITY_COLORS = { 'High': '#ef4444', 'Medium': '#f59e0b', 'Low': '#10b981' };
+  const PRIORITY_COLORS = { 'HIGH': '#ef4444', 'MEDIUM': '#f59e0b', 'LOW': '#10b981' };
 
   // Map types for Pie Chart
   const typeData = typeCounts.map(t => ({
@@ -149,7 +149,7 @@ export default function AnalyticsPage() {
 
   // Reformat priority data
   const priorityData = priorityCounts.map(p => ({
-    name: p.priority.charAt(0).toUpperCase() + p.priority.slice(1),
+    name: p.priority.toUpperCase(),
     value: p.count,
     originalValue: p.priority,
     filterKey: 'priority'
@@ -684,9 +684,9 @@ export default function AnalyticsPage() {
                   </ResponsiveContainer>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444' }}/> <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>High</span></div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b' }}/> <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Med</span></div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981' }}/> <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Low</span></div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444' }}/> <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>HIGH</span></div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b' }}/> <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>MEDIUM</span></div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981' }}/> <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>LOW</span></div>
                 </div>
               </>
             )}

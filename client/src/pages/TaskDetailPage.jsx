@@ -1147,8 +1147,8 @@ export default function TaskDetailPage() {
               <span className="task-id" style={{ color: 'var(--accent-purple)' }}>{task.key_prefix}-{task.task_number}</span>
             </div>
             <div className="td-side-row">
-              <span className="td-side-label">Priority</span>
-              <span className={`priority-badge priority-${task.priority}`}>{task.priority}</span>
+              <span className="td-side-label">PRIORITY</span>
+              <span className={`priority-badge priority-${task.priority}`} style={{ textTransform: 'uppercase' }}>{task.priority}</span>
             </div>
             <div className="td-side-row">
               <span className="td-side-label">Type</span>

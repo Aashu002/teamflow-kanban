@@ -265,9 +265,9 @@ export default function BoardPage() {
           <span className="board-filter-label">Priority:</span>
           <select id="filter-priority" className="board-filter-select" value={filterPriority} onChange={e => setFilterPriority(e.target.value)}>
             <option value="all">All</option>
-            <option value="high">🔴 High</option>
-            <option value="medium">🟡 Medium</option>
-            <option value="low">🟢 Low</option>
+            <option value="high">🔴 HIGH</option>
+            <option value="medium">🟡 MEDIUM</option>
+            <option value="low">🟢 LOW</option>
           </select>
         </div>
         <div className="board-filter-group">
