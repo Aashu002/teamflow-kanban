@@ -144,17 +144,17 @@ export default function AnalyticsPage() {
   const PRIORITY_COLORS = { 'HIGH': '#ef4444', 'MEDIUM': '#f59e0b', 'LOW': '#10b981' };
 
   // Map types for Pie Chart
-  const typeData = typeCounts.map(t => ({
-    name: TYPE_META[t.task_type]?.label || t.task_type,
-    value: t.count,
+  const typeData = (typeCounts || []).map(t => ({
+    name: TYPE_META[t.task_type]?.label || t.task_type || 'Unknown',
+    value: t.count || 0,
     originalValue: t.task_type,
     filterKey: 'type'
   }));
 
   // Reformat priority data
-  const priorityData = priorityCounts.map(p => ({
-    name: p.priority.toUpperCase(),
-    value: p.count,
+  const priorityData = (priorityCounts || []).map(p => ({
+    name: (p.priority || 'MEDIUM').toUpperCase(),
+    value: p.count || 0,
     originalValue: p.priority,
     filterKey: 'priority'
   }));
@@ -431,30 +431,28 @@ export default function AnalyticsPage() {
             <h3 style={{ margin: '0 0 24px 0', fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>
               Velocity ({dateRangeType === '7d' ? 'Last 7 Days' : dateRangeType === '30d' ? 'Last 30 Days' : 'Custom Range'})
             </h3>
-            <div style={{ width: '100%', height: 300, minHeight: 300 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={burndown} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorCreated" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
-                  <RechartsTooltip 
-                    contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-color)', borderRadius: 8 }}
-                    itemStyle={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}
-                  />
-                  <Area type="monotone" dataKey="created" name="Created" stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorCreated)" />
-                  <Area type="monotone" dataKey="completed" name="Completed" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCompleted)" />
-                </AreaChart>
-              </ResponsiveContainer>
+            <div style={{ width: '100%', height: 300, display: 'flex', justifyContent: 'center' }}>
+              <AreaChart width={700} height={300} data={burndown} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorCreated" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} dy={10} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
+                <RechartsTooltip 
+                  contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-color)', borderRadius: 8 }}
+                  itemStyle={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}
+                />
+                <Area type="monotone" dataKey="created" name="Created" stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorCreated)" />
+                <Area type="monotone" dataKey="completed" name="Completed" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCompleted)" />
+              </AreaChart>
             </div>
           </div>
 
@@ -464,16 +462,14 @@ export default function AnalyticsPage() {
             {hourStats.length === 0 ? (
               <div style={{ textAlign: 'center', color: 'var(--text-muted)', paddingTop: 50 }}>No time logged yet.</div>
             ) : (
-              <div style={{ width: '100%', height: 300, minHeight: 300 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={hourStats} margin={{ top: 10, right: 0, left: -20, bottom: 0 }} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
-                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
-                    <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-primary)' }} width={80} />
-                    <RechartsTooltip cursor={{ fill: 'rgba(255,255,255,0.02)' }} contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-color)', borderRadius: 8 }} itemStyle={{ color: 'var(--text-primary)' }}/>
-                    <Bar dataKey="total_hours" name="Hours" fill="#0ea5e9" radius={[0, 4, 4, 0]} barSize={20} />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div style={{ width: '100%', height: 300, display: 'flex', justifyContent: 'center' }}>
+                <BarChart width={350} height={300} data={hourStats} margin={{ top: 10, right: 30, left: 10, bottom: 0 }} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
+                  <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
+                  <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-primary)' }} width={80} />
+                  <RechartsTooltip cursor={{ fill: 'rgba(255,255,255,0.02)' }} contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-color)', borderRadius: 8 }} itemStyle={{ color: 'var(--text-primary)' }}/>
+                  <Bar dataKey="total_hours" name="Hours" fill="#0ea5e9" radius={[0, 4, 4, 0]} barSize={20} />
+                </BarChart>
               </div>
             )}
           </div>
@@ -487,16 +483,14 @@ export default function AnalyticsPage() {
             {workloadStats.length === 0 ? (
               <div style={{ textAlign: 'center', color: 'var(--text-muted)', paddingTop: 40 }}>No active workload.</div>
             ) : (
-              <div style={{ height: 260 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={workloadStats} layout="vertical" margin={{ left: 40 }}>
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-primary)' }} width={100} />
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
-                    <RechartsTooltip cursor={{ fill: 'rgba(255,255,255,0.02)' }} contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8 }} />
-                    <Bar dataKey="active_count" name="Active Tasks" fill="var(--accent-purple)" radius={[0, 4, 4, 0]} barSize={20} />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div style={{ width: '100%', height: 260, display: 'flex', justifyContent: 'center' }}>
+                <BarChart width={400} height={260} data={workloadStats} layout="vertical" margin={{ left: 40, right: 20 }}>
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-primary)' }} width={100} />
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
+                  <RechartsTooltip cursor={{ fill: 'rgba(255,255,255,0.02)' }} contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8 }} />
+                  <Bar dataKey="active_count" name="Active Tasks" fill="var(--accent-purple)" radius={[0, 4, 4, 0]} barSize={20} />
+                </BarChart>
               </div>
             )}
           </div>
@@ -522,28 +516,26 @@ export default function AnalyticsPage() {
                 Setup a project with a target date and tasks to see your burndown.
               </div>
             ) : (
-              <div style={{ height: 240 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={projectBurndown.data}>
-                    <defs>
-                      <linearGradient id="colorRemaining" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="var(--accent-cyan)" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="var(--accent-cyan)" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} minTickGap={30} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
-                    <RechartsTooltip 
-                      contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8 }}
-                      itemStyle={{ fontSize: 12 }}
-                    />
-                    {/* Ideal Line */}
-                    <Line type="monotone" dataKey="ideal" name="Ideal" stroke="rgba(255,255,255,0.3)" strokeDasharray="5 5" dot={false} strokeWidth={2} />
-                    {/* Actual Area */}
-                    <Area type="monotone" dataKey="remaining" name="Remaining Work" stroke="var(--accent-cyan)" fillOpacity={1} fill="url(#colorRemaining)" strokeWidth={3} />
-                  </ComposedChart>
-                </ResponsiveContainer>
+              <div style={{ width: '100%', height: 240, display: 'flex', justifyContent: 'center' }}>
+                <ComposedChart width={400} height={240} data={projectBurndown.data} margin={{ left: -10, right: 10 }}>
+                  <defs>
+                    <linearGradient id="colorRemaining" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--accent-cyan)" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="var(--accent-cyan)" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} minTickGap={30} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+                  <RechartsTooltip 
+                    contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8 }}
+                    itemStyle={{ fontSize: 12 }}
+                  />
+                  {/* Ideal Line */}
+                  <Line type="monotone" dataKey="ideal" name="Ideal" stroke="rgba(255,255,255,0.3)" strokeDasharray="5 5" dot={false} strokeWidth={2} />
+                  {/* Actual Area */}
+                  <Area type="monotone" dataKey="remaining" name="Remaining Work" stroke="var(--accent-cyan)" fillOpacity={1} fill="url(#colorRemaining)" strokeWidth={3} />
+                </ComposedChart>
               </div>
             )}
           </div>
@@ -602,25 +594,25 @@ export default function AnalyticsPage() {
             ) : (
               <>
                 <div style={{ width: '100%', height: 320, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  <PieChart width={400} height={300}>
-                    <Pie 
-                      data={typeData} 
-                      cx="50%" 
-                      cy="50%" 
-                      innerRadius={60} 
-                      outerRadius={100} 
-                      paddingAngle={5} 
-                      dataKey="value" 
-                      style={{ cursor: 'pointer' }} 
-                      stroke="none"
-                      onClick={handlePieClick}
-                      onMouseEnter={(_, index) => setActiveIndexType(index)}
-                      onMouseLeave={() => setActiveIndexType(null)}
-                      activeIndex={activeIndexType}
-                      activeShape={renderActiveShape}
-                    >
-                      {typeData.map((entry, index) => <Cell key={`cell-type-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                    </Pie>
+                    <PieChart width={400} height={300}>
+                      <Pie 
+                        data={typeData} 
+                        cx={200} 
+                        cy={150} 
+                        innerRadius={60} 
+                        outerRadius={100} 
+                        paddingAngle={5} 
+                        dataKey="value" 
+                        style={{ cursor: 'pointer' }} 
+                        stroke="none"
+                        onClick={handlePieClick}
+                        onMouseEnter={(_, index) => setActiveIndexType(index)}
+                        onMouseLeave={() => setActiveIndexType(null)}
+                        activeIndex={activeIndexType}
+                        activeShape={renderActiveShape}
+                      >
+                        {typeData.map((entry, index) => <Cell key={`cell-type-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                      </Pie>
                     <RechartsTooltip 
                       contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8 }} 
                       itemStyle={{ color: 'var(--text-primary)' }} 
@@ -647,42 +639,42 @@ export default function AnalyticsPage() {
             ) : (
               <>
                 <div style={{ width: '100%', height: 320, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  <PieChart width={400} height={300}>
-                    <Pie 
-                      data={statusData} 
-                      cx="50%" 
-                      cy="50%" 
-                      innerRadius={45} 
-                      outerRadius={70} 
-                      dataKey="value" 
-                      style={{ cursor: 'pointer' }} 
-                      stroke="none"
-                      onClick={handlePieClick}
-                      onMouseEnter={(_, index) => setActiveIndexStatus(index)}
-                      onMouseLeave={() => setActiveIndexStatus(null)}
-                      activeIndex={activeIndexStatus}
-                      activeShape={renderActiveShape}
-                    >
-                      {statusData.map((entry, index) => <Cell key={`cell-status-${index}`} fill={entry.color} />)}
-                    </Pie>
-                    <Pie 
-                      data={priorityData} 
-                      cx="50%" 
-                      cy="50%" 
-                      innerRadius={80} 
-                      outerRadius={105} 
-                      paddingAngle={2} 
-                      dataKey="value" 
-                      style={{ cursor: 'pointer' }} 
-                      stroke="none"
-                      onClick={handlePieClick}
-                      onMouseEnter={(_, index) => setActiveIndexPriority(index)}
-                      onMouseLeave={() => setActiveIndexPriority(null)}
-                      activeIndex={activeIndexPriority}
-                      activeShape={renderActiveShape}
-                    >
-                      {priorityData.map((entry, index) => <Cell key={`cell-priority-${index}`} fill={PRIORITY_COLORS[entry.name] || '#64748b'} />)}
-                    </Pie>
+                    <PieChart width={400} height={300}>
+                      <Pie 
+                        data={statusData} 
+                        cx={200} 
+                        cy={150} 
+                        innerRadius={45} 
+                        outerRadius={70} 
+                        dataKey="value" 
+                        style={{ cursor: 'pointer' }} 
+                        stroke="none"
+                        onClick={handlePieClick}
+                        onMouseEnter={(_, index) => setActiveIndexStatus(index)}
+                        onMouseLeave={() => setActiveIndexStatus(null)}
+                        activeIndex={activeIndexStatus}
+                        activeShape={renderActiveShape}
+                      >
+                        {statusData.map((entry, index) => <Cell key={`cell-status-${index}`} fill={entry.color} />)}
+                      </Pie>
+                      <Pie 
+                        data={priorityData} 
+                        cx={200} 
+                        cy={150} 
+                        innerRadius={80} 
+                        outerRadius={105} 
+                        paddingAngle={2} 
+                        dataKey="value" 
+                        style={{ cursor: 'pointer' }} 
+                        stroke="none"
+                        onClick={handlePieClick}
+                        onMouseEnter={(_, index) => setActiveIndexPriority(index)}
+                        onMouseLeave={() => setActiveIndexPriority(null)}
+                        activeIndex={activeIndexPriority}
+                        activeShape={renderActiveShape}
+                      >
+                        {priorityData.map((entry, index) => <Cell key={`cell-priority-${index}`} fill={PRIORITY_COLORS[entry.name] || '#64748b'} />)}
+                      </Pie>
                     <RechartsTooltip 
                       contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8 }} 
                       itemStyle={{ color: 'var(--text-primary)' }} 

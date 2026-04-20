@@ -176,22 +176,26 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
   const totalTickets = statusCounts.reduce((s, r) => s + r.count, 0);
 
   const priorityCounts = isAdmin
-    ? await db.prepare(`SELECT priority, COUNT(*) as count FROM tasks t WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} ${dateFilter} GROUP BY priority`).all(...(projectFilter ? [projectFilter, startIso, endIso] : [startIso, endIso]))
-    : await db.prepare(`
-        SELECT t.priority, COUNT(*) as count FROM tasks t
+    ? (await db.prepare(`SELECT t.priority AS priority, COUNT(*) as count FROM tasks t WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''} ${dateFilter} GROUP BY t.priority`).all(...(projectFilter ? [projectFilter, startIso, endIso] : [startIso, endIso])))
+        .map(r => ({ priority: r.priority, count: parseInt(r.count) }))
+    : (await db.prepare(`
+        SELECT t.priority AS priority, COUNT(*) as count FROM tasks t
         INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
         WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''} ${dateFilter}
         GROUP BY t.priority
-      `).all(...(projectFilter ? [userId, projectFilter, startIso, endIso] : [userId, startIso, endIso]));
+      `).all(...(projectFilter ? [userId, projectFilter, startIso, endIso] : [userId, startIso, endIso])))
+        .map(r => ({ priority: r.priority, count: parseInt(r.count) }));
 
   const typeCounts = isAdmin
-    ? await db.prepare(`SELECT task_type, COUNT(*) as count FROM tasks t WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} ${dateFilter} GROUP BY task_type`).all(...(projectFilter ? [projectFilter, startIso, endIso] : [startIso, endIso]))
-    : await db.prepare(`
-        SELECT t.task_type, COUNT(*) as count FROM tasks t
+    ? (await db.prepare(`SELECT t.task_type AS task_type, COUNT(*) as count FROM tasks t WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''} ${dateFilter} GROUP BY t.task_type`).all(...(projectFilter ? [projectFilter, startIso, endIso] : [startIso, endIso])))
+        .map(r => ({ task_type: r.task_type, count: parseInt(r.count) }))
+    : (await db.prepare(`
+        SELECT t.task_type AS task_type, COUNT(*) as count FROM tasks t
         INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
         WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''} ${dateFilter}
         GROUP BY t.task_type
-      `).all(...(projectFilter ? [userId, projectFilter, startIso, endIso] : [userId, startIso, endIso]));
+      `).all(...(projectFilter ? [userId, projectFilter, startIso, endIso] : [userId, startIso, endIso])))
+        .map(r => ({ task_type: r.task_type, count: parseInt(r.count) }));
 
   // ── 6. Personal Stats (Assigned to Me in a Sprint - always scoped to user) ──
   const myStatParams = projectFilter ? [userId, projectFilter] : [userId];
