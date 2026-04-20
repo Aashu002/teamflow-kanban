@@ -162,13 +162,12 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
     completed: parseInt(completedMap[day] || 0),
   }));
 
-  // ── 5. Stats by Project ─────────────────────────────
+  // ── 5. My Issues by Status/Priority/Type (assigned to me) ─────────────────────────────
   const rawStatusCounts = isAdmin
     ? await db.prepare(`SELECT status, COUNT(*) as count FROM tasks WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY status`).all(...(projectFilter ? [projectFilter] : []))
     : await db.prepare(`
         SELECT t.status, COUNT(*) as count FROM tasks t
-        INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
-        WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''}
+        WHERE t.assignee_id = ? ${projectFilter ? 'AND t.project_id = ?' : ''}
         GROUP BY t.status
       `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
 
@@ -179,8 +178,7 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
     ? await db.prepare(`SELECT priority, COUNT(*) as count FROM tasks WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY priority`).all(...(projectFilter ? [projectFilter] : []))
     : await db.prepare(`
         SELECT t.priority, COUNT(*) as count FROM tasks t
-        INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
-        WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''}
+        WHERE t.assignee_id = ? ${projectFilter ? 'AND t.project_id = ?' : ''}
         GROUP BY t.priority
       `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
 
@@ -188,8 +186,7 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
     ? await db.prepare(`SELECT task_type, COUNT(*) as count FROM tasks WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY task_type`).all(...(projectFilter ? [projectFilter] : []))
     : await db.prepare(`
         SELECT t.task_type, COUNT(*) as count FROM tasks t
-        INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
-        WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''}
+        WHERE t.assignee_id = ? ${projectFilter ? 'AND t.project_id = ?' : ''}
         GROUP BY t.task_type
       `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
 

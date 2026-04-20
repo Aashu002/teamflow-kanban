@@ -46,8 +46,10 @@ const STATUS_COLORS = {
 
 // ─── Donut Chart ─────────────────────────────────────────────────────────────
 
-function DonutChart({ statusCounts = [], totalTickets = 0 }) {
+function DonutChart({ statusCounts = [], totalTickets = 0, tasks = [] }) {
+  const navigate = useNavigate();
   const [selected, setSelected] = useState(null);
+  const [popupStatus, setPopupStatus] = useState(null);
 
   // Build segments from the 8 known columns
   const data = COLUMNS.map(col => ({
@@ -66,42 +68,36 @@ function DonutChart({ statusCounts = [], totalTickets = 0 }) {
     let angle = -Math.PI / 2;
     return data.map(d => {
       let sweep = (d.count / total) * 2 * Math.PI;
-      // SVG arcs fail to render if start and end points overlap identically
       if (sweep >= 2 * Math.PI) sweep = 2 * Math.PI - 0.0001;
-      
       const start = angle;
       const end   = angle + sweep;
       angle = end;
-
       const cos = (a) => Math.cos(a);
       const sin = (a) => Math.sin(a);
       const large = sweep > Math.PI ? 1 : 0;
-
       const ox1 = cx + outerR * cos(start), oy1 = cy + outerR * sin(start);
       const ox2 = cx + outerR * cos(end),   oy2 = cy + outerR * sin(end);
       const ix1 = cx + innerR * cos(end),   iy1 = cy + innerR * sin(end);
       const ix2 = cx + innerR * cos(start), iy2 = cy + innerR * sin(start);
-
       const path = `M ${ox1} ${oy1} A ${outerR} ${outerR} 0 ${large} 1 ${ox2} ${oy2} L ${ix1} ${iy1} A ${innerR} ${innerR} 0 ${large} 0 ${ix2} ${iy2} Z`;
-
-      // Label position (mid-angle)
       const mid = start + sweep / 2;
-      const lx = cx + (outerR + 14) * cos(mid);
-      const ly = cy + (outerR + 14) * sin(mid);
-
-      return { ...d, path, sweep, lx, ly };
+      return { ...d, path, sweep, mid };
     });
   })();
 
   const sel = selected ? data.find(d => d.id === selected) : null;
 
-  const handleClick = (id) => setSelected(prev => prev === id ? null : id);
+  const handleClick = (id) => {
+    setSelected(prev => prev === id ? null : id);
+    setPopupStatus(prev => prev === id ? null : id);
+  };
+
+  const popupTasks = popupStatus ? tasks.filter(t => t.status === popupStatus) : [];
+  const popupCol   = popupStatus ? COLUMNS.find(c => c.id === popupStatus) : null;
 
   return (
     <div className="donut-chart-wrap">
-      {/* Chart + Legend side by side */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-
         {/* SVG Donut */}
         <div style={{ flexShrink: 0 }}>
           <svg viewBox="0 0 200 200" width={150} height={150} style={{ overflow: 'visible' }}>
@@ -116,28 +112,18 @@ function DonutChart({ statusCounts = [], totalTickets = 0 }) {
                 {segments.map((seg, i) => {
                   const isSelected = selected === seg.id;
                   const dimmed     = selected && !isSelected;
-                  // Slightly "pop" the selected segment outward
-                  const midAngle   = -Math.PI / 2 + segments.slice(0, i).reduce((s, sg) => s + sg.sweep, 0) + seg.sweep / 2;
-                  const tx = isSelected ? Math.cos(midAngle) * 6 : 0;
-                  const ty = isSelected ? Math.sin(midAngle) * 6 : 0;
+                  const tx = isSelected ? Math.cos(seg.mid) * 6 : 0;
+                  const ty = isSelected ? Math.sin(seg.mid) * 6 : 0;
                   return (
                     <g key={seg.id}
                       onClick={() => handleClick(seg.id)}
                       style={{ cursor: 'pointer', transform: `translate(${tx}px,${ty}px)`, transition: 'transform 0.2s ease' }}
                     >
-                      <path
-                        d={seg.path}
-                        fill={seg.color}
-                        opacity={dimmed ? 0.25 : 0.92}
-                        stroke="var(--bg-card)"
-                        strokeWidth="2"
-                        style={{ transition: 'opacity 0.2s' }}
-                      />
+                      <path d={seg.path} fill={seg.color} opacity={dimmed ? 0.25 : 0.92}
+                        stroke="var(--bg-card)" strokeWidth="2" style={{ transition: 'opacity 0.2s' }} />
                     </g>
                   );
                 })}
-
-                {/* Donut hole — centre text */}
                 <circle cx={cx} cy={cy} r={innerR - 1} fill="var(--bg-card)"/>
                 <text x={cx} y={cy - 10} textAnchor="middle" fontSize="24" fontWeight="800"
                   fill={sel ? sel.color : 'var(--text-primary)'}>
@@ -147,9 +133,8 @@ function DonutChart({ statusCounts = [], totalTickets = 0 }) {
                   fill="rgba(148,163,184,0.75)" style={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
                   {sel ? 'issues' : 'total'}
                 </text>
-                <text x={cx} y={cy + 22} textAnchor="middle" fontSize="8.5"
-                  fill="rgba(148,163,184,0.55)">
-                  {sel ? sel.label : 'across all projects'}
+                <text x={cx} y={cy + 22} textAnchor="middle" fontSize="8.5" fill="rgba(148,163,184,0.55)">
+                  {sel ? sel.label : 'assigned to you'}
                 </text>
               </>
             )}
@@ -162,9 +147,7 @@ function DonutChart({ statusCounts = [], totalTickets = 0 }) {
             const pct = Math.round((d.count / total) * 100);
             const isSelected = selected === d.id;
             return (
-              <div
-                key={d.id}
-                onClick={() => handleClick(d.id)}
+              <div key={d.id} onClick={() => handleClick(d.id)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6,
                   padding: '4px 6px', borderRadius: 6, cursor: 'pointer',
@@ -188,8 +171,7 @@ function DonutChart({ statusCounts = [], totalTickets = 0 }) {
             <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>No tickets yet.</p>
           )}
           {selected && (
-            <button
-              onClick={() => setSelected(null)}
+            <button onClick={() => { setSelected(null); setPopupStatus(null); }}
               className="btn btn-ghost btn-sm"
               style={{ marginTop: 2, color: 'var(--text-muted)', fontSize: 10 }}
             >
@@ -198,6 +180,50 @@ function DonutChart({ statusCounts = [], totalTickets = 0 }) {
           )}
         </div>
       </div>
+
+      {/* Status Popup */}
+      {popupStatus && popupCol && (
+        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && (setPopupStatus(null), setSelected(null))}>
+          <div className="modal" style={{ maxWidth: 700, width: '90vw', maxHeight: '75vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header">
+              <div>
+                <div className="modal-title">
+                  <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: popupCol.color, marginRight: 8 }}/>
+                  {popupCol.label}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{popupTasks.length} issue{popupTasks.length !== 1 ? 's' : ''} assigned to you</div>
+              </div>
+              <button className="modal-close" onClick={() => { setPopupStatus(null); setSelected(null); }}>✕</button>
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1, padding: '0 4px 12px' }}>
+              {popupTasks.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No tasks in this status.</div>
+              ) : (
+                <table className="data-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr><th style={{ width: 90 }}>ID</th><th>Title</th><th style={{ width: 90 }}>Priority</th><th style={{ width: 80 }}>Type</th></tr>
+                  </thead>
+                  <tbody>
+                    {popupTasks.map(t => {
+                      const tm = TYPE_META[t.task_type] || TYPE_META.task;
+                      return (
+                        <tr key={t.id} style={{ cursor: 'pointer' }}
+                          onClick={() => { navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`); setPopupStatus(null); setSelected(null); }}
+                        >
+                          <td><span className="task-id" style={{ color: 'var(--accent-purple)' }}>{t.key_prefix}-{t.task_number}</span></td>
+                          <td style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{t.title}</td>
+                          <td><span className={`priority-badge priority-${t.priority}`}>{t.priority}</span></td>
+                          <td><span className={`type-badge type-${t.task_type}`}>{tm.icon} {tm.label}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -568,10 +594,10 @@ export default function HomePage() {
               </h3>
             </div>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16, marginTop: -8 }}>
-              All tickets across your projects · Click a segment to inspect
+              Your assigned issues · Click a segment to see tickets
             </p>
             <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
-              <DonutChart statusCounts={statusCounts} totalTickets={totalTickets} />
+              <DonutChart statusCounts={statusCounts} totalTickets={totalTickets} tasks={myTasks} />
             </div>
           </div>
         </div>
