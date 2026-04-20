@@ -601,32 +601,33 @@ export default function AnalyticsPage() {
               </div>
             ) : (
               <>
-                <div style={{ width: '100%', height: 300, minHeight: 300, display: 'flex', justifyContent: 'center' }}>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart width={300} height={300}>
-                      <Pie 
-                        data={typeData} 
-                        cx="50%" 
-                        cy="50%" 
-                        innerRadius={60} 
-                        outerRadius={100} 
-                        paddingAngle={5} 
-                        dataKey="value" 
-                        style={{ cursor: 'pointer' }} 
-                        stroke="none"
-                        onClick={handlePieClick}
-                        onMouseEnter={(_, index) => setActiveIndexType(index)}
-                        onMouseLeave={() => setActiveIndexType(null)}
-                        activeIndex={activeIndexType}
-                        activeShape={renderActiveShape}
-                      >
-                        {typeData.map((entry, index) => <Cell key={`cell-type-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />)}
-                      </Pie>
-                      <RechartsTooltip contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-color)', borderRadius: 8 }} itemStyle={{ color: 'var(--text-primary)' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                <div style={{ width: '100%', height: 320, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  <PieChart width={400} height={300}>
+                    <Pie 
+                      data={typeData} 
+                      cx="50%" 
+                      cy="50%" 
+                      innerRadius={60} 
+                      outerRadius={100} 
+                      paddingAngle={5} 
+                      dataKey="value" 
+                      style={{ cursor: 'pointer' }} 
+                      stroke="none"
+                      onClick={handlePieClick}
+                      onMouseEnter={(_, index) => setActiveIndexType(index)}
+                      onMouseLeave={() => setActiveIndexType(null)}
+                      activeIndex={activeIndexType}
+                      activeShape={renderActiveShape}
+                    >
+                      {typeData.map((entry, index) => <Cell key={`cell-type-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                    </Pie>
+                    <RechartsTooltip 
+                      contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8 }} 
+                      itemStyle={{ color: 'var(--text-primary)' }} 
+                    />
+                  </PieChart>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap', marginTop: 10 }}>
                   {typeData.map((entry, i) => (
                     <div key={entry.name} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <div style={{ width: 10, height: 10, borderRadius: '50%', background: COLORS[i % COLORS.length] }}/>
@@ -645,49 +646,50 @@ export default function AnalyticsPage() {
               <div style={{ textAlign: 'center', color: 'var(--text-muted)', paddingTop: 50 }}>No data available.</div>
             ) : (
               <>
-                <div style={{ width: '100%', height: 300, minHeight: 300, display: 'flex', justifyContent: 'center' }}>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart width={300} height={300}>
-                      <Pie 
-                        data={statusData} 
-                        cx="50%" 
-                        cy="50%" 
-                        innerRadius={0}
-                        outerRadius={65} 
-                        dataKey="value" 
-                        style={{ cursor: 'pointer' }} 
-                        stroke="none"
-                        onClick={handlePieClick}
-                        onMouseEnter={(_, index) => setActiveIndexStatus(index)}
-                        onMouseLeave={() => setActiveIndexStatus(null)}
-                        activeIndex={activeIndexStatus}
-                        activeShape={renderActiveShape}
-                      >
-                        {statusData.map((entry, index) => <Cell key={`cell-status-${index}`} fill={entry.color} stroke="none" />)}
-                      </Pie>
-                      <Pie 
-                        data={priorityData} 
-                        cx="50%" 
-                        cy="50%" 
-                        innerRadius={80} 
-                        outerRadius={100} 
-                        paddingAngle={2} 
-                        dataKey="value" 
-                        style={{ cursor: 'pointer' }} 
-                        stroke="none"
-                        onClick={handlePieClick}
-                        onMouseEnter={(_, index) => setActiveIndexPriority(index)}
-                        onMouseLeave={() => setActiveIndexPriority(null)}
-                        activeIndex={activeIndexPriority}
-                        activeShape={renderActiveShape}
-                      >
-                        {priorityData.map((entry, index) => <Cell key={`cell-priority-${index}`} fill={PRIORITY_COLORS[entry.name] || '#64748b'} stroke="none" />)}
-                      </Pie>
-                      <RechartsTooltip contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-color)', borderRadius: 8 }} itemStyle={{ color: 'var(--text-primary)' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                <div style={{ width: '100%', height: 320, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  <PieChart width={400} height={300}>
+                    <Pie 
+                      data={statusData} 
+                      cx="50%" 
+                      cy="50%" 
+                      innerRadius={45} 
+                      outerRadius={70} 
+                      dataKey="value" 
+                      style={{ cursor: 'pointer' }} 
+                      stroke="none"
+                      onClick={handlePieClick}
+                      onMouseEnter={(_, index) => setActiveIndexStatus(index)}
+                      onMouseLeave={() => setActiveIndexStatus(null)}
+                      activeIndex={activeIndexStatus}
+                      activeShape={renderActiveShape}
+                    >
+                      {statusData.map((entry, index) => <Cell key={`cell-status-${index}`} fill={entry.color} />)}
+                    </Pie>
+                    <Pie 
+                      data={priorityData} 
+                      cx="50%" 
+                      cy="50%" 
+                      innerRadius={80} 
+                      outerRadius={105} 
+                      paddingAngle={2} 
+                      dataKey="value" 
+                      style={{ cursor: 'pointer' }} 
+                      stroke="none"
+                      onClick={handlePieClick}
+                      onMouseEnter={(_, index) => setActiveIndexPriority(index)}
+                      onMouseLeave={() => setActiveIndexPriority(null)}
+                      activeIndex={activeIndexPriority}
+                      activeShape={renderActiveShape}
+                    >
+                      {priorityData.map((entry, index) => <Cell key={`cell-priority-${index}`} fill={PRIORITY_COLORS[entry.name] || '#64748b'} />)}
+                    </Pie>
+                    <RechartsTooltip 
+                      contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8 }} 
+                      itemStyle={{ color: 'var(--text-primary)' }} 
+                    />
+                  </PieChart>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap', marginTop: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444' }}/> <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>HIGH</span></div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b' }}/> <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>MEDIUM</span></div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981' }}/> <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>LOW</span></div>
