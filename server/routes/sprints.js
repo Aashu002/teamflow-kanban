@@ -83,10 +83,6 @@ router.post('/:id/start', authMiddleware, canManageSprints, asyncHandler(async (
   }
 
   await db.prepare(`UPDATE sprints SET status = 'active' WHERE id = ?`).run(req.params.id);
-  
-  // Transition tasks currently in 'backlog' to 'open' when the sprint starts so they show up on the board
-  await db.prepare(`UPDATE tasks SET status = 'open' WHERE sprint_id = ? AND status = 'backlog'`).run(req.params.id);
-
   const updated = await db.prepare('SELECT * FROM sprints WHERE id = ?').get(req.params.id);
   res.json(updated);
 }));
@@ -133,9 +129,6 @@ router.post('/:id/tasks', authMiddleware, asyncHandler(async (req, res) => {
 
   for (const id of ids) {
     await db.prepare('UPDATE tasks SET sprint_id = ? WHERE id = ?').run(req.params.id, id);
-    if (sprint.status === 'active') {
-      await db.prepare(`UPDATE tasks SET status = 'open' WHERE id = ? AND status = 'backlog'`).run(id);
-    }
   }
   res.json({ success: true, count: ids.length });
 }));

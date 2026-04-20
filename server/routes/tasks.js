@@ -19,7 +19,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } }); // 20MB limit
 
-const VALID_STATUSES = ['backlog','open','gathering','inprogress','qa_testing','qa_completed','stakeholder','done'];
+const VALID_STATUSES = ['open','gathering','inprogress','qa_testing','qa_completed','stakeholder','done'];
 const VALID_PRIORITIES = ['low','medium','high'];
 const VALID_TYPES = ['epic','story','task','subtask','bug'];
 
@@ -268,7 +268,7 @@ router.post('/', authMiddleware, asyncHandler(async (req, res) => {
   const row = await db.prepare('SELECT task_counter FROM projects WHERE id = ?').get(projectId);
   const task_counter = row.task_counter;
 
-  const s = VALID_STATUSES.includes(status) ? status : 'backlog';
+  const s = VALID_STATUSES.includes(status) ? status : 'open';
   const p = VALID_PRIORITIES.includes(priority) ? priority : 'medium';
   const t = VALID_TYPES.includes(task_type) ? task_type : 'task';
 

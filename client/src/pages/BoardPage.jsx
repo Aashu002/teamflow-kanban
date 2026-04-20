@@ -27,11 +27,10 @@ export default function BoardPage() {
   const navigate = useNavigate();
   const { setHeaderData, clearHeaderData } = useNavbar();
   const [project, setProject] = useState(null);
-  const [viewMode, setViewMode] = useState('board');
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
   const [sprints, setSprints] = useState([]);
-  const [activeSprint, setActiveSprint] = useState(null); // the currently active sprint for this project
+  const [activeSprint, setActiveSprint] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTask, setActiveTask] = useState(null);
   const [createInColumn, setCreateInColumn] = useState(null);
@@ -103,8 +102,6 @@ export default function BoardPage() {
     return true;
   });
 
-
-
   const handleDragStart = ({ active }) => {
     setActiveTask(tasks.find(t => t.id === active.id) || null);
   };
@@ -112,13 +109,9 @@ export default function BoardPage() {
   const handleDragEnd = async ({ active, over }) => {
     setActiveTask(null);
     if (!over) return;
-    
-    // Default format is "statusId". But Swimlanes use "statusId|groupId"
     const targetCol = String(over.id).split('|')[0];
-    
     const task = tasks.find(t => t.id === active.id);
     if (!task || task.status === targetCol) return;
-
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: targetCol } : t));
     try {
       await api.patch(`/tasks/${task.id}`, { status: targetCol });
@@ -144,33 +137,27 @@ export default function BoardPage() {
   if (loading) return <div className="loading-screen"><div className="loading-spinner"/></div>;
 
   const canEditProject = isAdmin || project?.owner_id === user?.id;
-  const SPRINT_STATUS_COLOR = { planning: '#8b5cf6', active: '#10b981', completed: '#6b7280' };
 
-  const sprintFilteredTasks = activeSprint
-    ? filteredTasks.filter(t => t.sprint_id === activeSprint.id || t.status === 'backlog')
+  // Board shows tasks belonging to the active sprint.
+  // If no active sprint exists (project doesn't use sprints), show all tasks.
+  const boardTasks = activeSprint
+    ? filteredTasks.filter(t => t.sprint_id === activeSprint.id)
     : filteredTasks;
-
-  const boardTasks = sprintFilteredTasks.filter(t => t.status !== 'backlog');
-  const backlogTasks = filteredTasks.filter(t => t.status === 'backlog');
-  const tasksByCol = col => boardTasks.filter(t => t.status === col);
 
   // Grouping logic for swimlanes
   const getSwimlanes = () => {
     if (groupBy === 'none') return [{ id: 'all', title: '', tasks: boardTasks }];
-    
+
     const groupsMap = new Map();
     const otherTasks = [];
 
     boardTasks.forEach(t => {
-      // Find direct parent
       let groupTask = t.parent_id ? tasks.find(pt => pt.id === t.parent_id) : null;
       let matched = false;
 
-      // Ensure the parent matches the groupBy type (e.g. searching for Epic vs Story)
       if (groupTask && groupTask.task_type === groupBy) {
         matched = true;
       } else if (groupBy === 'epic' && groupTask?.task_type === 'story' && groupTask.parent_id) {
-        // If grouping by epic, but direct parent is a story, resolve the story's parent (grandparent) 
         const grandParent = tasks.find(pt => pt.id === groupTask.parent_id);
         if (grandParent && grandParent.task_type === 'epic') {
           groupTask = grandParent;
@@ -203,7 +190,7 @@ export default function BoardPage() {
 
   return (
     <div className="board-page">
-      {/* Sprint Banner — always shown, changes based on whether a sprint is active */}
+      {/* Sprint Banner */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12,
         padding: '7px 20px',
@@ -235,16 +222,17 @@ export default function BoardPage() {
       </div>
 
       <div className="board-toolbar">
-        <span className="board-toolbar-title">{viewMode === 'board' ? 'Kanban Board' : 'Project Backlog'}</span>
-        <span className="board-task-count">{viewMode === 'board' ? boardTasks.length : backlogTasks.length} issues</span>
+        <span className="board-toolbar-title">Kanban Board</span>
+        <span className="board-task-count">{boardTasks.length} issues</span>
         <div style={{ flex: 1 }} />
-        
+
         <div className="admin-tabs" style={{ margin: '0 16px', background: 'var(--bg-secondary)', padding: 4, borderRadius: 8 }}>
-          <button className={`admin-tab ${viewMode === 'board' ? 'active' : ''}`} style={{ padding: '4px 12px', minWidth: 80 }} onClick={() => setViewMode('board')}>Board</button>
-          <button className={`admin-tab ${viewMode === 'backlog' ? 'active' : ''}`} style={{ padding: '4px 12px', minWidth: 80 }} onClick={() => setViewMode('backlog')}>Backlog ({tasks.filter(t => t.status === 'backlog').length})</button>
+          <button className="admin-tab active" style={{ padding: '4px 12px', minWidth: 80 }}>Board</button>
+          <button className="admin-tab" style={{ padding: '4px 12px', minWidth: 80 }} onClick={() => navigate(`/projects/${projectId}/backlog`)}>
+            Backlog ({tasks.filter(t => !t.sprint_id).length})
+          </button>
         </div>
 
-        {/* Always-visible Sprint Planning link */}
         <button
           className="btn btn-secondary btn-sm"
           style={{ marginRight: 12, fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
@@ -296,7 +284,7 @@ export default function BoardPage() {
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Project Goal</div>
             {canEditProject ? (
-              <input 
+              <input
                 style={{ width: '100%', background: 'transparent', border: '1px dashed transparent', padding: '4px 8px', margin: '-4px -8px', borderRadius: 4, color: 'var(--text-primary)', fontSize: 14 }}
                 placeholder="Click to add a project goal/objective..."
                 defaultValue={project.project_goal || ''}
@@ -314,7 +302,7 @@ export default function BoardPage() {
           <div style={{ width: 200, borderLeft: '1px solid var(--border)', paddingLeft: 24 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Target Date</div>
             {canEditProject ? (
-              <input 
+              <input
                 type="date"
                 style={{ background: 'transparent', border: '1px dashed transparent', padding: '2px 8px', margin: '-2px -8px', borderRadius: 4, color: project.estimated_completion_date ? 'var(--accent-purple)' : 'var(--text-muted)', fontSize: 14, fontWeight: 500 }}
                 defaultValue={project.estimated_completion_date || ''}
@@ -330,98 +318,35 @@ export default function BoardPage() {
       )}
 
       <div className="board-content">
-        {viewMode === 'board' ? (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className="board-container" style={{ display: 'flex', flexDirection: 'column', overflowX: 'auto', gap: groupBy !== 'none' ? 32 : 0 }}>
-              {swimlanes.map(lane => (
-                <div key={lane.id} className="swimlane">
-                  {lane.title && (
-                    <div className="swimlane-header">
-                      {lane.title}
-                      <span className="swimlane-count">{lane.tasks.length} issues</span>
-                    </div>
-                  )}
-                  <div className="swimlane-columns" style={{ display: 'flex', gap: 16 }}>
-                    {COLUMNS.map((col, i) => (
-                      <KanbanColumn
-                        key={`${lane.id}-${col.id}`}
-                        col={col}
-                        tasks={lane.tasks.filter(t => t.status === col.id)}
-                        droppableId={`${col.id}|${lane.id}`}
-                        style={{ animationDelay: `${i * 40}ms` }}
-                        onAddTask={() => setCreateInColumn(col.id)}
-                      />
-                    ))}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="board-container" style={{ display: 'flex', flexDirection: 'column', overflowX: 'auto', gap: groupBy !== 'none' ? 32 : 0 }}>
+            {swimlanes.map(lane => (
+              <div key={lane.id} className="swimlane">
+                {lane.title && (
+                  <div className="swimlane-header">
+                    {lane.title}
+                    <span className="swimlane-count">{lane.tasks.length} issues</span>
                   </div>
+                )}
+                <div className="swimlane-columns" style={{ display: 'flex', gap: 16 }}>
+                  {COLUMNS.map((col, i) => (
+                    <KanbanColumn
+                      key={`${lane.id}-${col.id}`}
+                      col={col}
+                      tasks={lane.tasks.filter(t => t.status === col.id)}
+                      droppableId={`${col.id}|${lane.id}`}
+                      style={{ animationDelay: `${i * 40}ms` }}
+                      onAddTask={() => setCreateInColumn(col.id)}
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
-            <DragOverlay>
-              {activeTask && <TaskCard task={activeTask} dragging />}
-            </DragOverlay>
-          </DndContext>
-        ) : (
-          <div className="admin-container" style={{ margin: '20px auto', maxWidth: 1000, background: 'var(--bg-surface)', padding: 20, borderRadius: 12, border: '1px solid var(--border-color)' }}>
-            <h3 style={{ marginTop: 0, marginBottom: 20, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>Backlog</span>
-              <span style={{ fontSize: 12, padding: '2px 8px', background: 'var(--bg-secondary)', borderRadius: 12, color: 'var(--text-muted)' }}>{backlogTasks.length}</span>
-            </h3>
-            {backlogTasks.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-                No issues in the backlog.
               </div>
-            ) : (
-              <table className="data-table" style={{ width: '100%' }}>
-                <thead>
-                  <tr>
-                    <th style={{ width: 100 }}>Key</th>
-                    <th>Title & Type</th>
-                    <th style={{ width: 140 }}>Assignee</th>
-                    <th style={{ width: 120, textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {backlogTasks.map(t => {
-                    const tm = TYPE_META[t.task_type] || TYPE_META.task;
-                    return (
-                      <tr key={t.id} style={{ cursor: 'pointer' }} onDoubleClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)}>
-                        <td onClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)}>
-                          <span className="task-id" style={{ color: 'var(--accent-purple)' }}>{t.key_prefix}-{t.task_number}</span>
-                        </td>
-                        <td onClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)}>
-                          <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-primary)' }}>
-                            {t.title}
-                            <span className={`type-badge type-${t.task_type}`} style={{ fontSize: 10, padding: '2px 6px' }}>{tm.icon} {tm.label}</span>
-                          </div>
-                        </td>
-                        <td onClick={() => navigate(`/projects/${t.project_id}/tasks/${t.key_prefix}-${t.task_number}`)} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                          {t.assignee_name || 'Unassigned'}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button 
-                            className="btn btn-sm btn-secondary" 
-                            style={{ padding: '4px 8px', fontSize: 11 }}
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              try {
-                                await api.patch(`/tasks/${t.id}`, { status: 'open' });
-                                setTasks(prev => prev.map(pt => pt.id === t.id ? { ...pt, status: 'open' } : pt));
-                              } catch (err) {
-                                console.error(err);
-                              }
-                            }}
-                          >
-                            → Move to Board
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+            ))}
           </div>
-        )}
+          <DragOverlay>
+            {activeTask && <TaskCard task={activeTask} dragging />}
+          </DragOverlay>
+        </DndContext>
       </div>
 
       {createInColumn && (

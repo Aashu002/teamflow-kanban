@@ -476,6 +476,8 @@ export default function TaskDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [showCreateChildModal, setShowCreateChildModal] = useState(false);
+  const [sprints, setSprints] = useState([]);
+  const [sprintSaving, setSprintSaving] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -534,7 +536,12 @@ export default function TaskDetailPage() {
     };
   }, [projectId, loadData]);
 
-  useEffect(() => { api.get('/users').then(r => setUsers(r.data)).catch(() => {}); }, []);
+  useEffect(() => {
+    api.get('/users').then(r => setUsers(r.data)).catch(() => {});
+    if (projectId) {
+      api.get(`/sprints?projectId=${projectId}`).then(r => setSprints(r.data)).catch(() => {});
+    }
+  }, [projectId]);
 
   const patch = useCallback(async (body) => {
     const { data } = await api.patch(`/tasks/${task.id}`, body);
@@ -1134,7 +1141,6 @@ export default function TaskDetailPage() {
             </div>
           </SideCard>
 
-          {/* Issue Info */}
           <SideCard title="Issue Info" icon="🔖">
             <div className="td-side-row">
               <span className="td-side-label">Issue ID</span>
@@ -1147,6 +1153,41 @@ export default function TaskDetailPage() {
             <div className="td-side-row">
               <span className="td-side-label">Type</span>
               <span className={`type-badge type-${task.task_type}`}>{tm.icon} {tm.label}</span>
+            </div>
+            <div className="td-side-row">
+              <span className="td-side-label">Sprint</span>
+              <select
+                disabled={sprintSaving}
+                value={task.sprint_id || ''}
+                className="form-select"
+                style={{ fontSize: 11, padding: '3px 6px', minWidth: 0, flex: 1 }}
+                onChange={async (e) => {
+                  const newSprintId = e.target.value ? Number(e.target.value) : null;
+                  const oldSprintId = task.sprint_id;
+                  setSprintSaving(true);
+                  try {
+                    if (oldSprintId) {
+                      await api.delete(`/sprints/${oldSprintId}/tasks/${task.id}`);
+                    }
+                    if (newSprintId) {
+                      await api.post(`/sprints/${newSprintId}/tasks`, { taskId: task.id });
+                    }
+                    setTask(prev => ({ ...prev, sprint_id: newSprintId }));
+                    toast({ message: newSprintId ? 'Added to sprint' : 'Removed from sprint', type: 'success' });
+                  } catch {
+                    toast({ message: 'Failed to update sprint', type: 'error' });
+                  } finally {
+                    setSprintSaving(false);
+                  }
+                }}
+              >
+                <option value="">— No Sprint —</option>
+                {sprints.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} {s.status === 'active' ? '🟢' : s.status === 'completed' ? '✓' : '○'}
+                  </option>
+                ))}
+              </select>
             </div>
             {task.parent_id && (
               <div className="td-side-row" style={{ marginBottom: 0 }}>
