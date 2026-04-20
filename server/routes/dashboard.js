@@ -32,14 +32,13 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
         ORDER BY p.created_at DESC
       `).all(userId);
 
-  // ── 2. Tasks assigned to this user (open only) ──────────────────────────
   const myTasks = await db.prepare(`
     SELECT t.*, p.key_prefix, p.name as project_name,
       creator.name as creator_name, creator.avatar_color as creator_color
     FROM tasks t
     LEFT JOIN projects p ON p.id = t.project_id
     LEFT JOIN users creator ON creator.id = t.creator_id
-    WHERE t.assignee_id = ? ${projectFilter ? 'AND t.project_id = ?' : ''}
+    WHERE t.assignee_id = ? AND t.sprint_id IS NOT NULL ${projectFilter ? 'AND t.project_id = ?' : ''}
     ORDER BY
       CASE t.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
       t.created_at DESC
@@ -193,16 +192,16 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
         GROUP BY t.task_type
       `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
 
-  // ── 6. Personal Stats (Assigned to Me - always scoped to user, regardless of role) ──
+  // ── 6. Personal Stats (Assigned to Me in a Sprint - always scoped to user) ──
   const myStatParams = projectFilter ? [userId, projectFilter] : [userId];
-  const myRawStatus = await db.prepare(`SELECT status, COUNT(*) as count FROM tasks WHERE assignee_id = ? ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY status`).all(...myStatParams);
+  const myRawStatus = await db.prepare(`SELECT status, COUNT(*) as count FROM tasks WHERE assignee_id = ? AND sprint_id IS NOT NULL ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY status`).all(...myStatParams);
   const myStatusCounts = myRawStatus.map(r => ({ status: r.status, count: parseInt(r.count) }));
   const myTotalTickets = myStatusCounts.reduce((s, r) => s + r.count, 0);
 
-  const myRawPriority = await db.prepare(`SELECT priority, COUNT(*) as count FROM tasks WHERE assignee_id = ? ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY priority`).all(...myStatParams);
+  const myRawPriority = await db.prepare(`SELECT priority, COUNT(*) as count FROM tasks WHERE assignee_id = ? AND sprint_id IS NOT NULL ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY priority`).all(...myStatParams);
   const myPriorityCounts = myRawPriority.map(r => ({ priority: r.priority, count: parseInt(r.count) }));
 
-  const myRawType = await db.prepare(`SELECT task_type, COUNT(*) as count FROM tasks WHERE assignee_id = ? ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY task_type`).all(...myStatParams);
+  const myRawType = await db.prepare(`SELECT task_type, COUNT(*) as count FROM tasks WHERE assignee_id = ? AND sprint_id IS NOT NULL ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY task_type`).all(...myStatParams);
   const myTypeCounts = myRawType.map(r => ({ task_type: r.task_type, count: parseInt(r.count) }));
 
   const hourStats = isAdmin
