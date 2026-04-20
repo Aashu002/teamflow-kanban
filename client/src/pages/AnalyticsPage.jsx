@@ -601,14 +601,14 @@ export default function AnalyticsPage() {
               </div>
             ) : (
               <>
-                <div style={{ width: '100%', height: 300, minHeight: 300 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
+                <div style={{ width: '100%', height: 300, minHeight: 300, display: 'flex', justifyContent: 'center' }}>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart width={300} height={300}>
                       <Pie 
                         data={typeData} 
                         cx="50%" 
                         cy="50%" 
-                        innerRadius={70} 
+                        innerRadius={60} 
                         outerRadius={100} 
                         paddingAngle={5} 
                         dataKey="value" 
@@ -645,15 +645,15 @@ export default function AnalyticsPage() {
               <div style={{ textAlign: 'center', color: 'var(--text-muted)', paddingTop: 50 }}>No data available.</div>
             ) : (
               <>
-                <div style={{ width: '100%', height: 300, minHeight: 300 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
+                <div style={{ width: '100%', height: 300, minHeight: 300, display: 'flex', justifyContent: 'center' }}>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart width={300} height={300}>
                       <Pie 
                         data={statusData} 
                         cx="50%" 
                         cy="50%" 
                         innerRadius={0}
-                        outerRadius={75} 
+                        outerRadius={65} 
                         dataKey="value" 
                         style={{ cursor: 'pointer' }} 
                         stroke="none"
@@ -669,8 +669,8 @@ export default function AnalyticsPage() {
                         data={priorityData} 
                         cx="50%" 
                         cy="50%" 
-                        innerRadius={90} 
-                        outerRadius={110} 
+                        innerRadius={80} 
+                        outerRadius={100} 
                         paddingAngle={2} 
                         dataKey="value" 
                         style={{ cursor: 'pointer' }} 

@@ -162,35 +162,36 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
   }));
 
   // ── 5. Project/Global Stats (Admins see all, Members see project-wide) ──────────
+  const dateFilter = 'AND t.created_at::date BETWEEN ? AND ?';
   const rawStatusCounts = isAdmin
-    ? await db.prepare(`SELECT status, COUNT(*) as count FROM tasks WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY status`).all(...(projectFilter ? [projectFilter] : []))
+    ? await db.prepare(`SELECT status, COUNT(*) as count FROM tasks t WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} ${dateFilter} GROUP BY status`).all(...(projectFilter ? [projectFilter, startIso, endIso] : [startIso, endIso]))
     : await db.prepare(`
         SELECT t.status, COUNT(*) as count FROM tasks t
         INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
-        WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''}
+        WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''} ${dateFilter}
         GROUP BY t.status
-      `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
+      `).all(...(projectFilter ? [userId, projectFilter, startIso, endIso] : [userId, startIso, endIso]));
 
   const statusCounts = rawStatusCounts.map(r => ({ status: r.status, count: parseInt(r.count) }));
   const totalTickets = statusCounts.reduce((s, r) => s + r.count, 0);
 
   const priorityCounts = isAdmin
-    ? await db.prepare(`SELECT priority, COUNT(*) as count FROM tasks WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY priority`).all(...(projectFilter ? [projectFilter] : []))
+    ? await db.prepare(`SELECT priority, COUNT(*) as count FROM tasks t WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} ${dateFilter} GROUP BY priority`).all(...(projectFilter ? [projectFilter, startIso, endIso] : [startIso, endIso]))
     : await db.prepare(`
         SELECT t.priority, COUNT(*) as count FROM tasks t
         INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
-        WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''}
+        WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''} ${dateFilter}
         GROUP BY t.priority
-      `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
+      `).all(...(projectFilter ? [userId, projectFilter, startIso, endIso] : [userId, startIso, endIso]));
 
   const typeCounts = isAdmin
-    ? await db.prepare(`SELECT task_type, COUNT(*) as count FROM tasks WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY task_type`).all(...(projectFilter ? [projectFilter] : []))
+    ? await db.prepare(`SELECT task_type, COUNT(*) as count FROM tasks t WHERE 1=1 ${projectFilter ? 'AND project_id = ?' : ''} ${dateFilter} GROUP BY task_type`).all(...(projectFilter ? [projectFilter, startIso, endIso] : [startIso, endIso]))
     : await db.prepare(`
         SELECT t.task_type, COUNT(*) as count FROM tasks t
         INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
-        WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''}
+        WHERE 1=1 ${projectFilter ? 'AND t.project_id = ?' : ''} ${dateFilter}
         GROUP BY t.task_type
-      `).all(...(projectFilter ? [userId, projectFilter] : [userId]));
+      `).all(...(projectFilter ? [userId, projectFilter, startIso, endIso] : [userId, startIso, endIso]));
 
   // ── 6. Personal Stats (Assigned to Me in a Sprint - always scoped to user) ──
   const myStatParams = projectFilter ? [userId, projectFilter] : [userId];
@@ -204,21 +205,24 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
   const myRawType = await db.prepare(`SELECT task_type, COUNT(*) as count FROM tasks WHERE assignee_id = ? AND sprint_id IS NOT NULL AND status != 'backlog' ${projectFilter ? 'AND project_id = ?' : ''} GROUP BY task_type`).all(...myStatParams);
   const myTypeCounts = myRawType.map(r => ({ task_type: r.task_type, count: parseInt(r.count) }));
 
+  const logDateFilter = 'AND h.logged_at::date BETWEEN ? AND ?';
   const hourStats = isAdmin
     ? await db.prepare(`
         SELECT u.name, SUM(h.hours) as total_hours FROM hour_logs h
         INNER JOIN users u ON u.id = h.user_id
+        WHERE 1=1 ${logDateFilter}
         GROUP BY u.id, u.name
         ORDER BY total_hours DESC
-      `).all()
+      `).all(startIso, endIso)
     : await db.prepare(`
         SELECT u.name, SUM(h.hours) as total_hours FROM hour_logs h
         INNER JOIN users u ON u.id = h.user_id
         INNER JOIN tasks t ON t.id = h.task_id
         INNER JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ?
+        WHERE 1=1 ${logDateFilter}
         GROUP BY u.id, u.name
         ORDER BY total_hours DESC
-      `).all(userId);
+      `).all(userId, startIso, endIso);
 
   // ── 7. Workload Balance: Active tasks per member ────────────────────────
   const workloadStats = isAdmin
