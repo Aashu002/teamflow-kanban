@@ -1,44 +1,43 @@
 /**
- * Simple script to test Resend integration.
- * Run with: RESEND_API_KEY=re_yourkey node server/scripts/testEmail.js [recipient_email]
+ * Simple script to test Gmail SMTP integration.
  */
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 
-const apiKey = process.env.RESEND_API_KEY;
-const fromEmail = process.env.SMTP_FROM || 'teamflow.kanban@gmail.com';
+const user = process.env.SMTP_USER;
+const pass = process.env.SMTP_PASS;
+const fromEmail = process.env.SMTP_FROM || user;
 const recipient = process.argv[2] || fromEmail;
 
-if (!apiKey) {
-  console.error('❌ Error: RESEND_API_KEY not found in environment.');
+if (!user || !pass) {
+  console.error('❌ Error: SMTP_USER or SMTP_PASS not found in environment.');
   process.exit(1);
 }
 
-const resend = new Resend(apiKey);
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: { user, pass },
+});
 
 async function test() {
-  console.log(`🚀 Sending test email from ${fromEmail} to ${recipient}...`);
+  console.log(`🚀 Sending test email via Gmail SMTP from ${fromEmail} to ${recipient}...`);
   try {
-    const { data, error } = await resend.emails.send({
-      from: `TeamFlow Test <${fromEmail}>`,
-      to: [recipient],
-      subject: 'Hello from TeamFlow! ⚡',
+    const info = await transporter.sendMail({
+      from: `"TeamFlow Test" <${fromEmail}>`,
+      to: recipient,
+      subject: 'Gmail SMTP Test Success! ⚡',
       html: `
-        <div style="font-family: sans-serif; padding: 20px; border: 1px solid #7c3aed; border-radius: 8px;">
-          <h2 style="color: #7c3aed;">Notification System Active!</h2>
-          <p>This is a test email to verify that your <strong>Resend</strong> integration is working correctly.</p>
-          <p>If you see this, you are ready to receive task assignment and update alerts.</p>
+        <div style="font-family: sans-serif; padding: 20px; border: 1px solid #7c3aed; border-radius: 8px; background: #0f172a; color: #f8fafc;">
+          <h2 style="color: #7c3aed;">Notification System Ready!</h2>
+          <p>This is a test email to verify that your <strong>Gmail App Password</strong> is working correctly.</p>
+          <p>You can now send task alerts to any team member in the project.</p>
         </div>
       `
     });
 
-    if (error) {
-       console.error('❌ Resend Error:', error);
-    } else {
-       console.log('✅ Success! Email sent. ID:', data.id);
-    }
+    console.log('✅ Success! Email sent. ID:', info.messageId);
   } catch (err) {
-    console.error('❌ Failed to run test:', err.message);
+    console.error('❌ Failed to run Gmail SMTP test:', err.message);
   }
 }
 

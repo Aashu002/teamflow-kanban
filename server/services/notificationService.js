@@ -1,8 +1,15 @@
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
 const FROM_EMAIL = process.env.SMTP_FROM || 'teamflow.kanban@gmail.com';
-const APP_URL = process.env.APP_URL || 'http://localhost:5173'; // Default to dev, should be Render URL in prod
+const APP_URL = process.env.APP_URL || 'http://localhost:5173';
 
 /**
  * Basic HTML Wrapper for emails
@@ -38,23 +45,21 @@ const emailTemplate = (title, content, actionLabel, actionUrl) => `
 `;
 
 const sendEmail = async (to, subject, html) => {
-  if (!resend) {
-    console.warn('⚠️ Resend API Key missing. Skipping email.');
+  if (!process.env.SMTP_PASS) {
+    console.warn('⚠️ SMTP Credentials missing. Skipping email.');
     return;
   }
   try {
-    const { data, error } = await resend.emails.send({
-      from: `TeamFlow Alerts <${FROM_EMAIL}>`,
-      to: [to],
+    const info = await transporter.sendMail({
+      from: `"TeamFlow Alerts" <${FROM_EMAIL}>`,
+      to,
       subject,
       html,
     });
-    if (error) {
-      console.error('❌ Resend Error:', error);
-    }
-    return data;
+    console.log('✅ Email sent:', info.messageId);
+    return info;
   } catch (err) {
-    console.error('❌ Failed to send email:', err.message);
+    console.error('❌ Failed to send email via Gmail SMTP:', err.message);
   }
 };
 
