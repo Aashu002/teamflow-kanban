@@ -5,6 +5,7 @@ const multer = require('multer');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const asyncHandler = require('../middleware/asyncHandler');
+const notifications = require('../services/notificationService');
 
 const router = express.Router();
 
@@ -278,6 +279,15 @@ router.post('/', authMiddleware, asyncHandler(async (req, res) => {
   `).run(task_counter, t, title, description || '', s, p, projectId, req.user.id, assigneeId || null, parentId || null, sprint_id || null);
 
   const task = await selectTask(result.lastInsertRowid);
+  
+  // Notification: New Assignment
+  if (task.assignee_id && task.assignee_id !== req.user.id) {
+    const assignee = await db.prepare('SELECT name, email FROM users WHERE id = ?').get(task.assignee_id);
+    if (assignee) {
+      notifications.notifyTaskAssignment(task, assignee).catch(e => console.error('Email Error:', e));
+    }
+  }
+
   if (req.app.get('io')) req.app.get('io').to(`project_${projectId}`).emit('task_created', task);
   res.status(201).json(task);
 }));
@@ -310,7 +320,32 @@ router.patch('/:id', authMiddleware, asyncHandler(async (req, res) => {
   );
 
   const updatedTask = await selectTask(req.params.id);
+
+  // Notifications for Updates
   if (req.app.get('io')) req.app.get('io').to(`project_${updatedTask.project_id}`).emit('task_updated', updatedTask);
+  
+  // 1. Assignment Change
+  const wasAssignedChanged = assigneeId !== undefined && (assigneeId || null) !== task.assignee_id;
+  if (wasAssignedChanged && updatedTask.assignee_id && updatedTask.assignee_id !== req.user.id) {
+    const newAssignee = await db.prepare('SELECT name, email FROM users WHERE id = ?').get(updatedTask.assignee_id);
+    if (newAssignee) {
+      notifications.notifyTaskAssignment(updatedTask, newAssignee).catch(e => console.error('Email Error:', e));
+    }
+  }
+
+  // 2. Status Change
+  const wasStatusChanged = status !== undefined && status !== task.status;
+  if (wasStatusChanged) {
+    const recipients = [];
+    if (updatedTask.assignee_id && updatedTask.assignee_id !== req.user.id) recipients.push(updatedTask.assignee_id);
+    if (updatedTask.creator_id && updatedTask.creator_id !== req.user.id && !recipients.includes(updatedTask.creator_id)) recipients.push(updatedTask.creator_id);
+    
+    for (const rid of recipients) {
+      const u = await db.prepare('SELECT name, email FROM users WHERE id = ?').get(rid);
+      if (u) notifications.notifyStatusChange(updatedTask, u, req.user).catch(e => console.error('Email Error:', e));
+    }
+  }
+
   res.json(updatedTask);
 }));
 
@@ -454,6 +489,18 @@ router.post('/:id/comments', authMiddleware, asyncHandler(async (req, res) => {
     FROM comments c LEFT JOIN users u ON u.id = c.user_id WHERE c.id = ?
   `).get(result.lastInsertRowid);
   
+  const taskMeta = await selectTask(req.params.id);
+  
+  // Notification: New Comment
+  const notifyIds = [];
+  if (taskMeta.assignee_id && taskMeta.assignee_id !== req.user.id) notifyIds.push(taskMeta.assignee_id);
+  if (taskMeta.creator_id && taskMeta.creator_id !== req.user.id && !notifyIds.includes(taskMeta.creator_id)) notifyIds.push(taskMeta.creator_id);
+
+  for (const rid of notifyIds) {
+    const u = await db.prepare('SELECT name, email FROM users WHERE id = ?').get(rid);
+    if (u) notifications.notifyNewComment(taskMeta, u, comment, req.user).catch(e => console.error('Email Error:', e));
+  }
+
   if (req.app.get('io')) {
     req.app.get('io').to(`project_${task.project_id}`).emit('comment_added', comment);
   }
